@@ -435,7 +435,7 @@ class RealTimeApp:
         self.running = True
 
         # set up matplotlib figure
-        plt.style.use("seaborn-darkgrid")
+        plt.style.use("seaborn-v0_8-darkgrid")
         fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
         ax1, ax2, ax3 = axs
 
