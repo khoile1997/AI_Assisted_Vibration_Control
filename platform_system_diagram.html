@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Vibration Control Platform - System Diagram</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .diagram-section {
+            margin-bottom: 50px;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        canvas {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f8f9fa;
+            display: block;
+            margin: 20px auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid #333;
+        }
+        
+        .specs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .spec-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .spec-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .spec-value {
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .control-flow {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            margin-top: 20px;
+        }
+        
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .flow-number {
+            background: #667eea;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .equations {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            border-left: 4px solid #764ba2;
+        }
+        
+        .equation {
+            margin: 15px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+        
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Active Vibration Control Platform</h1>
+            <div class="subtitle">Reinforcement Learning-Based Stabilization System</div>
+        </header>
+        
+        <div class="content">
+            <!-- Top View -->
+            <div class="diagram-section">
+                <h2 class="section-title">📐 Platform Top View</h2>
+                <canvas id="topView" width="900" height="700"></canvas>
+            </div>
+            
+            <!-- Side View -->
+            <div class="diagram-section">
+                <h2 class="section-title">📏 Platform Side View (Cross-Section)</h2>
+                <canvas id="sideView" width="900" height="600"></canvas>
+            </div>
+            
+            <!-- System Architecture -->
+            <div class="diagram-section">
+                <h2 class="section-title">🔄 Control System Architecture</h2>
+                <canvas id="architecture" width="900" height="700"></canvas>
+            </div>
+            
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6b6b;"></div>
+                    <span>Electromagnetic Actuators (Motors)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ecdc4;"></div>
+                    <span>IMU Sensor (Center)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #95e1d3;"></div>
+                    <span>Platform Surface</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffd93d;"></div>
+                    <span>Current Sensors</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #a8dadc;"></div>
+                    <span>Force Vectors</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #667eea;"></div>
+                    <span>RL Agent / Control System</span>
+                </div>
+            </div>
+            
+            <!-- Technical Specifications -->
+            <div class="diagram-section">
+                <h2 class="section-title">⚙️ System Specifications</h2>
+                <div class="specs">
+                    <div class="spec-card">
+                        <div class="spec-title">Platform Dimensions</div>
+                        <div class="spec-value">
+                            • Rectangular geometry<br>
+                            • 4 corner-mounted actuators<br>
+                            • Central IMU placement<br>
+                            • Symmetric mass distribution
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Actuators</div>
+                        <div class="spec-value">
+                            • Type: Electromagnetic motors<br>
+                            • Count: 4 (one per corner)<br>
+                            • Current range: ±2.0 A<br>
+                            • Individual control
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Sensors</div>
+                        <div class="spec-value">
+                            • IMU: Roll (φ), Pitch (θ)<br>
+                            • Angular rates: φ̇, θ̇<br>
+                            • Current sensors: 4 channels<br>
+                            • Sample rate: 20 Hz (50ms)
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">State Space</div>
+                        <div class="spec-value">
+                            • Observations: [φ, θ, φ̇, θ̇]<br>
+                            • Actions: [I₁, I₂, I₃, I₄]<br>
+                            • Control frequency: 20 Hz<br>
+                            • Episode length: ≤8.0 s
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">RL Agent</div>
+                        <div class="spec-value">
+                            • Algorithm: REINFORCE<br>
+                            • Policy: Gaussian MLP<br>
+                            • Hidden layers: [128, 128]<br>
+                            • Optimizer: Adam (lr=1e-3)
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Recovery Criteria</div>
+                        <div class="spec-value">
+                            • Angle threshold: ±0.01 rad<br>
+                            • Rate threshold: ±0.05 rad/s<br>
+                            • Fast recovery: <1.0 s<br>
+                            • Bonus reward: +50.0
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Reward Function -->
+            <div class="diagram-section">
+                <h2 class="section-title">📊 Reward Function</h2>
+                <div class="equations">
+                    <div class="equation">
+                        <strong>Episodic Reward:</strong><br>
+                        R = -(T × w<sub>t</sub> + E × w<sub>a</sub> + V × w<sub>v</sub>) + B × I
+                    </div>
+                    <div class="equation">
+                        <strong>Where:</strong><br>
+                        • T = Time to recovery (seconds)<br>
+                        • E = Actuation effort = ∫ Σ(I<sub>i</sub>²) dt<br>
+                        • V = Time with excessive motion (|φ̇| or |θ̇| > 0.2 rad/s)<br>
+                        • I = Binary indicator (1 if fast recovery, 0 otherwise)<br>
+                        • w<sub>t</sub>=1.0, w<sub>a</sub>=0.1, w<sub>v</sub>=0.5, B=50.0
+                    </div>
+                </div>
+                
+                <div class="note">
+                    <strong>📝 Note:</strong> The reward function encourages fast recovery with minimal energy 
+                    expenditure and reduced vibration. The bonus term rewards successful stabilization within 
+                    1 second, promoting efficient control strategies.
+                </div>
+            </div>
+            
+            <!-- Control Flow -->
+            <div class="diagram-section">
+                <h2 class="section-title">🔁 Control Loop Workflow</h2>
+                <div class="control-flow">
+                    <div class="flow-step">
+                        <div class="flow-number">1</div>
+                        <div>
+                            <strong>State Measurement</strong><br>
+                            IMU measures platform angles (φ, θ) and angular rates (φ̇, θ̇) at 20 Hz
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">2</div>
+                        <div>
+                            <strong>Observation Formation</strong><br>
+                            State vector s<sub>t</sub> = [φ, θ, φ̇, θ̇] sent to RL agent via TCP/IP
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">3</div>
+                        <div>
+                            <strong>Policy Evaluation</strong><br>
+                            Neural network policy π<sub>θ</sub>(a|s) outputs Gaussian distribution over actions
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">4</div>
+                        <div>
+                            <strong>Action Sampling</strong><br>
+                            Sample motor currents a<sub>t</sub> = [I₁, I₂, I₃, I₄] from policy distribution
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">5</div>
+                        <div>
+                            <strong>Actuation</strong><br>
+                            Apply currents to electromagnetic motors, generating corrective forces
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">6</div>
+                        <div>
+                            <strong>Platform Dynamics</strong><br>
+                            Platform responds to forces, new state evolves according to physics
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">7</div>
+                        <div>
+                            <strong>Trajectory Recording</strong><br>
+                            Store (s<sub>t</sub>, a<sub>t</sub>, log π(a<sub>t</sub>|s<sub>t</sub>)) for training
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">8</div>
+                        <div>
+                            <strong>Episode Termination</strong><br>
+                            Check recovery criteria or maximum episode time (8 seconds)
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">9</div>
+                        <div>
+                            <strong>Reward Computation</strong><br>
+                            Calculate episodic reward R based on recovery time, effort, and vibration
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">10</div>
+                        <div>
+                            <strong>Policy Update (Training)</strong><br>
+                            Backpropagate: ∇<sub>θ</sub>J = E[∇<sub>θ</sub> log π<sub>θ</sub>(a|s) × R]
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Training Process -->
+            <div class="diagram-section">
+                <h2 class="section-title">🎓 Training Methodology</h2>
+                <div class="specs">
+                    <div class="spec-card">
+                        <div class="spec-title">Initial Conditions</div>
+                        <div class="spec-value">
+                            • Loaded from vibration_data.csv<br>
+                            • Diverse disturbance scenarios<br>
+                            • Random sampling per episode<br>
+                            • Columns: φ, θ, φ̇, θ̇
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Exploration Strategy</div>
+                        <div class="spec-value">
+                            • Gaussian policy sampling<br>
+                            • Additional exploration noise<br>
+                            • Std scaling: 0.05<br>
+                            • Gradual annealing possible
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Batch Configuration</div>
+                        <div class="spec-value">
+                            • Episodes per epoch: 8<br>
+                            • Total epochs: 200<br>
+                            • Steps per episode: variable<br>
+                            • Return normalization: ✓
+                        </div>
+                    </div>
+                    <div class="spec-card">
+                        <div class="spec-title">Optimization</div>
+                        <div class="spec-value">
+                            • Gradient clipping: 0.5<br>
+                            • Weight initialization: orthogonal<br>
+                            • Checkpoint interval: 10 epochs<br>
+                            • Best model tracking: ✓
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Helper function to draw arrow
+        function drawArrow(ctx, fromX, fromY, toX, toY, color = '#333', width = 2) {
+            const headlen = 15;
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.beginPath();
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.stroke();
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), 
+                      toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), 
+                      toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // Draw rounded rectangle
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+        
+        // TOP VIEW
+        const topCanvas = document.getElementById('topView');
+        const topCtx = topCanvas.getContext('2d');
+        
+        // Platform dimensions
+        const platformWidth = 400;
+        const platformHeight = 300;
+        const centerX = 450;
+        const centerY = 350;
+        
+        // Draw platform
+        topCtx.fillStyle = '#95e1d3';
+        topCtx.strokeStyle = '#333';
+        topCtx.lineWidth = 3;
+        roundRect(topCtx, centerX - platformWidth/2, centerY - platformHeight/2, 
+                 platformWidth, platformHeight, 10);
+        topCtx.fill();
+        topCtx.stroke();
+        
+        // Add grid pattern
+        topCtx.strokeStyle = '#6ab7a8';
+        topCtx.lineWidth = 1;
+        for (let i = -4; i <= 4; i++) {
+            topCtx.beginPath();
+            topCtx.moveTo(centerX - platformWidth/2, centerY + i * 30);
+            topCtx.lineTo(centerX + platformWidth/2, centerY + i * 30);
+            topCtx.stroke();
+            
+            topCtx.beginPath();
+            topCtx.moveTo(centerX + i * 40, centerY - platformHeight/2);
+            topCtx.lineTo(centerX + i * 40, centerY + platformHeight/2);
+            topCtx.stroke();
+        }
+        
+        // Draw actuators at corners
+        const actuatorRadius = 30;
+        const actuatorPositions = [
+            {x: centerX - platformWidth/2 + 40, y: centerY - platformHeight/2 + 40, label: 'M1'},
+            {x: centerX + platformWidth/2 - 40, y: centerY - platformHeight/2 + 40, label: 'M2'},
+            {x: centerX - platformWidth/2 + 40, y: centerY + platformHeight/2 - 40, label: 'M3'},
+            {x: centerX + platformWidth/2 - 40, y: centerY + platformHeight/2 - 40, label: 'M4'}
+        ];
+        
+        actuatorPositions.forEach((pos, idx) => {
+            // Motor body
+            topCtx.fillStyle = '#ff6b6b';
+            topCtx.beginPath();
+            topCtx.arc(pos.x, pos.y, actuatorRadius, 0, Math.PI * 2);
+            topCtx.fill();
+            topCtx.strokeStyle = '#c92a2a';
+            topCtx.lineWidth = 3;
+            topCtx.stroke();
+            
+            // Motor details
+            topCtx.fillStyle = '#a61e1e';
+            topCtx.beginPath();
+            topCtx.arc(pos.x, pos.y, actuatorRadius - 10, 0, Math.PI * 2);
+            topCtx.fill();
+            
+            // Current sensor indicator
+            topCtx.fillStyle = '#ffd93d';
+            topCtx.strokeStyle = '#f59f00';
+            topCtx.lineWidth = 2;
+            topCtx.beginPath();
+            topCtx.arc(pos.x, pos.y - actuatorRadius - 15, 8, 0, Math.PI * 2);
+            topCtx.fill();
+            topCtx.stroke();
+            
+            // Label
+            topCtx.fillStyle = 'white';
+            topCtx.font = 'bold 16px Arial';
+            topCtx.textAlign = 'center';
+            topCtx.textBaseline = 'middle';
+            topCtx.fillText(pos.label, pos.x, pos.y);
+            
+            // Current label
+            topCtx.fillStyle = '#333';
+            topCtx.font = 'bold 12px Arial';
+            topCtx.fillText('I' + (idx + 1), pos.x, pos.y - actuatorRadius - 35);
+        });
+        
+        // Draw IMU at center
+        const imuSize = 50;
+        topCtx.fillStyle = '#4ecdc4';
+        topCtx.strokeStyle = '#087f5b';
+        topCtx.lineWidth = 3;
+        roundRect(topCtx, centerX - imuSize/2, centerY - imuSize/2, imuSize, imuSize, 5);
+        topCtx.fill();
+        topCtx.stroke();
+        
+        // IMU details
+        topCtx.fillStyle = '#0ca678';
+        topCtx.beginPath();
+        topCtx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+        topCtx.fill();
+        
+        topCtx.fillStyle = 'white';
+        topCtx.font = 'bold 14px Arial';
+        topCtx.textAlign = 'center';
+        topCtx.textBaseline = 'middle';
+        topCtx.fillText('IMU', centerX, centerY);
+        
+        // Draw coordinate axes
+        const axisLength = 80;
+        // φ (roll) - red
+        drawArrow(topCtx, centerX + imuSize/2 + 20, centerY, 
+                 centerX + imuSize/2 + 20 + axisLength, centerY, '#e03131', 3);
+        topCtx.fillStyle = '#e03131';
+        topCtx.font = 'bold 18px Arial';
+        topCtx.fillText('φ (roll)', centerX + imuSize/2 + 20 + axisLength + 30, centerY);
+        
+        // θ (pitch) - blue
+        drawArrow(topCtx, centerX, centerY - imuSize/2 - 20, 
+                 centerX, centerY - imuSize/2 - 20 - axisLength, '#1971c2', 3);
+        topCtx.fillStyle = '#1971c2';
+        topCtx.fillText('θ (pitch)', centerX, centerY - imuSize/2 - 20 - axisLength - 20);
+        
+        // Labels
+        topCtx.fillStyle = '#333';
+        topCtx.font = 'bold 20px Arial';
+        topCtx.textAlign = 'center';
+        topCtx.fillText('TOP VIEW', centerX, 50);
+        
+        // Dimensions
+        topCtx.strokeStyle = '#868e96';
+        topCtx.lineWidth = 1;
+        topCtx.setLineDash([5, 5]);
+        
+        // Width dimension
+        topCtx.beginPath();
+        topCtx.moveTo(centerX - platformWidth/2, centerY + platformHeight/2 + 50);
+        topCtx.lineTo(centerX + platformWidth/2, centerY + platformHeight/2 + 50);
+        topCtx.stroke();
+        drawArrow(topCtx, centerX - platformWidth/2, centerY + platformHeight/2 + 50,
+                 centerX - platformWidth/2 - 20, centerY + platformHeight/2 + 50, '#868e96', 1);
+        drawArrow(topCtx, centerX + platformWidth/2, centerY + platformHeight/2 + 50,
+                 centerX + platformWidth/2 + 20, centerY + platformHeight/2 + 50, '#868e96', 1);
+        
+        topCtx.setLineDash([]);
+        topCtx.fillStyle = '#495057';
+        topCtx.font = '14px Arial';
+        topCtx.fillText('Width (L)', centerX, centerY + platformHeight/2 + 70);
+        
+        // SIDE VIEW
+        const sideCanvas = document.getElementById('sideView');
+        const sideCtx = sideCanvas.getContext('2d');
+        
+        const sideY = 300;
+        const baseHeight = 50;
+        const platformThickness = 20;
+        
+        // Draw base/support structure
+        sideCtx.fillStyle = '#adb5bd';
+        sideCtx.strokeStyle = '#495057';
+        sideCtx.lineWidth = 2;
+        roundRect(sideCtx, centerX - platformWidth/2 - 50, sideY + 100, 
+                 platformWidth + 100, baseHeight, 5);
+        sideCtx.fill();
+        sideCtx.stroke();
+        
+        // Draw platform
+        sideCtx.fillStyle = '#95e1d3';
+        sideCtx.strokeStyle = '#333';
+        sideCtx.lineWidth = 3;
+        roundRect(sideCtx, centerX - platformWidth/2, sideY, 
+                 platformWidth, platformThickness, 5);
+        sideCtx.fill();
+        sideCtx.stroke();
+        
+        // Draw actuators (side view)
+        const actuatorHeight = 80;
+        const actuatorWidth = 40;
+        
+        // Left actuator
+        sideCtx.fillStyle = '#ff6b6b';
+        sideCtx.strokeStyle = '#c92a2a';
+        sideCtx.lineWidth = 2;
+        roundRect(sideCtx, centerX - platformWidth/2 + 40 - actuatorWidth/2, 
+                 sideY + platformThickness, actuatorWidth, actuatorHeight, 5);
+        sideCtx.fill();
+        sideCtx.stroke();
+        
+        // Right actuator
+        roundRect(sideCtx, centerX + platformWidth/2 - 40 - actuatorWidth/2, 
+                 sideY + platformThickness, actuatorWidth, actuatorHeight, 5);
+        sideCtx.fill();
+        sideCtx.stroke();
+        
+        // Force vectors
+        const forceLength = 60;
+        // Upward force from left actuator
+        drawArrow(sideCtx, centerX - platformWidth/2 + 40, sideY + 10,
+                 centerX - platformWidth/2 + 40, sideY + 10 - forceLength, '#a8dadc', 4);
+        sideCtx.fillStyle = '#a8dadc';
+        sideCtx.font = 'bold 14px Arial';
+        sideCtx.fillText('F₁', centerX - platformWidth/2 + 40 - 25, sideY + 10 - forceLength/2);
+        
+        // Upward force from right actuator
+        drawArrow(sideCtx, centerX + platformWidth/2 - 40, sideY + 10,
+                 centerX + platformWidth/2 - 40, sideY + 10 - forceLength, '#a8dadc', 4);
+        sideCtx.fillStyle = '#a8dadc';
+        sideCtx.fillText('F₂', centerX + platformWidth/2 - 40 + 15, sideY + 10 - forceLength/2);
+        
+        // IMU (side view)
+        const imuSideSize = 30;
+        sideCtx.fillStyle = '#4ecdc4';
+        sideCtx.strokeStyle = '#087f5b';
+        sideCtx.lineWidth = 2;
+        roundRect(sideCtx, centerX - imuSideSize/2, sideY - imuSideSize - 5, 
+                 imuSideSize, imuSideSize, 3);
+        sideCtx.fill();
+        sideCtx.stroke();
+        
+        sideCtx.fillStyle = 'white';
+        sideCtx.font = 'bold 10px Arial';
+        sideCtx.textAlign = 'center';
+        sideCtx.fillText('IMU', centerX, sideY - imuSideSize/2 - 5);
+        
+        // Tilt angle indication
+        sideCtx.strokeStyle = '#e03131';
+        sideCtx.lineWidth = 2;
+        sideCtx.setLineDash([3, 3]);
+        sideCtx.beginPath();
+        sideCtx.arc(centerX, sideY + platformThickness/2, 100, -Math.PI, -Math.PI + 0.3);
+        sideCtx.stroke();
+        sideCtx.setLineDash([]);
+        
+        sideCtx.fillStyle = '#e03131';
+        sideCtx.font = 'bold 16px Arial';
+        sideCtx.fillText('φ', centerX - 80, sideY - 30);
+        
+        // Labels
+        sideCtx.fillStyle = '#333';
+        sideCtx.font = 'bold 20px Arial';
+        sideCtx.textAlign = 'center';
+        sideCtx.fillText('SIDE VIEW (Cross-Section)', centerX, 50);
+        
+        // Annotations
+        sideCtx.fillStyle = '#495057';
+        sideCtx.font = '12px Arial';
+        sideCtx.fillText('Electromagnetic', centerX - platformWidth/2 + 40, sideY + platformThickness + actuatorHeight + 25);
+        sideCtx.fillText('Actuator', centerX - platformWidth/2 + 40, sideY + platformThickness + actuatorHeight + 40);
+        
+        sideCtx.fillText('Platform', centerX, sideY - 50);
+        sideCtx.fillText('(tilted)', centerX, sideY - 35);
+        
+        // ARCHITECTURE DIAGRAM
+        const archCanvas = document.getElementById('architecture');
+        const archCtx = archCanvas.getContext('2d');
+        
+        const boxWidth = 180;
+        const boxHeight = 80;
+        const spacing = 100;
+        
+        // Title
+        archCtx.fillStyle = '#333';
+        archCtx.font = 'bold 20px Arial';
+        archCtx.textAlign = 'center';
+        archCtx.fillText('CONTROL SYSTEM ARCHITECTURE', 450, 40);
+        
+        // Components
+        const components = [
+            {x: 100, y: 120, label: 'Platform\nDynamics', color: '#95e1d3', icon: '🏗️'},
+            {x: 350, y: 120, label: 'IMU\nSensor', color: '#4ecdc4', icon: '📡'},
+            {x: 600, y: 120, label: 'State\nObservation', color: '#74c0fc', icon: '👁️'},
+            {x: 700, y: 280, label: 'RL Agent\n(Policy π)', color: '#667eea', icon: '🤖'},
+            {x: 450, y: 440, label: 'Action\nSampling', color: '#845ef7', icon: '🎲'},
+            {x: 200, y: 440, label: 'Motor\nDrivers', color: '#ffd93d', icon: '⚡'},
+            {x: 100, y: 580, label: 'Actuator\nCurrents', color: '#ff6b6b', icon: '🔌'}
+        ];
+        
+        components.forEach(comp => {
+            // Box
+            archCtx.fillStyle = comp.color;
+            archCtx.strokeStyle = '#333';
+            archCtx.lineWidth = 3;
+            roundRect(archCtx, comp.x, comp.y, boxWidth, boxHeight, 10);
+            archCtx.fill();
+            archCtx.stroke();
+            
+            // Icon
+            archCtx.font = '32px Arial';
+            archCtx.fillText(comp.icon, comp.x + boxWidth/2, comp.y + 30);
+            
+            // Label
+            archCtx.fillStyle = '#333';
+            archCtx.font = 'bold 14px Arial';
+            const lines = comp.label.split('\n');
+            lines.forEach((line, i) => {
+                archCtx.fillText(line, comp.x + boxWidth/2, comp.y + 55 + i * 16);
+            });
+        });
+        
+        // Connections with labels
+        // Platform -> IMU
+        drawArrow(archCtx, 100 + boxWidth, 120 + boxHeight/2, 350, 120 + boxHeight/2, '#333', 3);
+        archCtx.fillStyle = '#495057';
+        archCtx.font = '12px Arial';
+        archCtx.fillText('motion', 280, 145);
+        
+        // IMU -> State
+        drawArrow(archCtx, 350 + boxWidth, 120 + boxHeight/2, 600, 120 + boxHeight/2, '#333', 3);
+        archCtx.fillText('[φ, θ, φ̇, θ̇]', 510, 145);
+        
+        // State -> RL Agent
+        drawArrow(archCtx, 600 + boxWidth/2, 120 + boxHeight, 700 + boxWidth/2, 280, '#333', 3);
+        archCtx.fillText('observation', 720, 220);
+        
+        // RL Agent -> Action
+        drawArrow(archCtx, 700 + boxWidth/2, 280 + boxHeight, 450 + boxWidth/2, 440, '#333', 3);
+        archCtx.fillText('policy π(a|s)', 550, 380);
+        
+        // Action -> Motors
+        drawArrow(archCtx, 450, 440 + boxHeight/2, 200 + boxWidth, 440 + boxHeight/2, '#333', 3);
+        archCtx.fillText('[I₁, I₂, I₃, I₄]', 310, 465);
+        
+        // Motors -> Currents
+        drawArrow(archCtx, 200 + boxWidth/2, 440 + boxHeight, 100 + boxWidth/2, 580, '#333', 3);
+        archCtx.fillText('control signals', 160, 530);
+        
+        // Currents -> Platform (feedback)
+        const curve1X = 100 + boxWidth/2;
+        const curve1Y1 = 580 + boxHeight;
+        const curve1Y2 = 120 + boxHeight;
+        archCtx.strokeStyle = '#333';
+        archCtx.lineWidth = 3;
+        archCtx.beginPath();
+        archCtx.moveTo(curve1X, curve1Y1);
+        archCtx.bezierCurveTo(
+            curve1X - 150, curve1Y1 + 50,
+            curve1X - 150, curve1Y2 + 50,
+            curve1X, curve1Y2
+        );
+        archCtx.stroke();
+        drawArrow(archCtx, curve1X - 5, curve1Y2 + 10, curve1X, curve1Y2, '#333', 3);
+        archCtx.fillStyle = '#495057';
+        archCtx.font = '12px Arial';
+        archCtx.fillText('forces', 30, 380);
+        
+        // TCP/IP communication box
+        archCtx.strokeStyle = '#fd7e14';
+        archCtx.lineWidth = 2;
+        archCtx.setLineDash([5, 5]);
+        roundRect(archCtx, 580, 100, 240, 460, 15);
+        archCtx.stroke();
+        archCtx.setLineDash([]);
+        
+        archCtx.fillStyle = '#fd7e14';
+        archCtx.font = 'bold 14px Arial';
+        archCtx.fillText('TCP/IP', 700, 90);
+        archCtx.font = '12px Arial';
+        archCtx.fillText('127.0.0.1:5005', 700, 575);
+    </script>
+</body>
+</html>
