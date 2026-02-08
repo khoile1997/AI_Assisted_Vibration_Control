@@ -432,10 +432,10 @@ This improved implementation builds upon the original controller and incorporate
 
 ---
 
-**Good luck with your master's thesis! 🎓**
+**Footnote 🎓**
 
 This implementation provides a solid foundation for high-quality research in reinforcement learning for control systems. The modular design, comprehensive documentation, and professional visualization will help you create a thesis you can be proud of.
 
 Remember: The goal is not just to make the platform stable, but to understand *why* and *how* reinforcement learning achieves this goal. Use the ablation studies and analysis tools provided to gain deep insights.
 
-**You've got this! 🚀**
+**Thank you 🚀**

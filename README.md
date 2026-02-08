@@ -419,17 +419,17 @@ Solutions:
 If you use this code in your research, please cite:
 
 ```bibtex
-@mastersthesis{yourname2026vibration,
+@mastersthesis{khoile2026vibration,
   title={Active Vibration Control Using Deep Reinforcement Learning},
-  author={Your Name},
+  author={Khoi Le},
   year={2026},
-  school={Your University}
+  school={San Jose State University}
 }
 ```
 
 ## 📄 License
 
-MIT License - Feel free to use and modify for research purposes.
+Feel free to use and modify for research purposes.
 
 ## 🤝 Contributing
 
@@ -437,8 +437,8 @@ This is a thesis project, but suggestions and improvements are welcome!
 
 ## ✉️ Contact
 
-For questions or collaboration: [your.email@university.edu]
+For questions or collaboration: [khoi.h.le@sjsu.edu]
 
 ---
 
-**Good luck with your master's thesis! 🎓🚀**
+**Good luck with your project! 🎓🚀**
