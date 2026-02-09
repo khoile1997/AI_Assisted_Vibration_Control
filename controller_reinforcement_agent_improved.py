@@ -658,10 +658,9 @@ class REINFORCEAgent:
                 # Need to recompute log_prob with policy for the actual action
                 obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(self.device)
                 action_tensor = torch.from_numpy(action).unsqueeze(0).to(self.device)
-                with torch.no_grad():
-                    log_prob_tensor, _ = self.policy.evaluate_actions(
-                        obs_tensor, action_tensor
-                    )
+                log_prob_tensor, _ = self.policy.evaluate_actions(
+                    obs_tensor, action_tensor
+                )
                 trajectory.append((obs, action, log_prob_tensor))
             
             # Wait for control interval
