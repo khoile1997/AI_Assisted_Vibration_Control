@@ -1,0 +1,86 @@
+2026-02-08 18:51:38,463 - __main__ - INFO - Connecting to simulator...
+2026-02-08 18:51:38,473 - __main__ - INFO - Successfully connected to simulator at 127.0.0.1:5005
+2026-02-08 18:51:38,473 - __main__ - INFO - Initializing agent...
+2026-02-08 18:51:38,551 - __main__ - INFO - Loaded 50 initial conditions
+2026-02-08 18:51:40,948 - __main__ - INFO - Initialized REINFORCE agent with policy: PolicyNetwork(
+  (backbone): Sequential(
+    (0): Linear(in_features=4, out_features=128, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=128, out_features=128, bias=True)
+    (3): ReLU()
+  )
+  (mean_head): Linear(in_features=128, out_features=4, bias=True)
+)
+2026-02-08 18:51:40,948 - __main__ - INFO - Starting training for 100 epochs
+2026-02-08 18:51:40,948 - __main__ - INFO - Episodes per epoch: 4
+2026-02-08 18:51:40,948 - __main__ - INFO - Exploration noise: 0.1
+2026-02-08 18:52:07,924 - __main__ - INFO - [Epoch 1/100] Episode 1/4: R=-5.88, T=5.00s, E=8.79, V=0.00s, Recovered=False
+2026-02-08 18:52:35,317 - __main__ - INFO - [Epoch 1/100] Episode 2/4: R=-5.95, T=5.00s, E=9.51, V=0.00s, Recovered=False
+2026-02-08 18:53:02,640 - __main__ - INFO - [Epoch 1/100] Episode 3/4: R=-5.97, T=5.00s, E=9.66, V=0.00s, Recovered=False
+2026-02-08 18:53:30,132 - __main__ - INFO - [Epoch 1/100] Episode 4/4: R=-5.99, T=5.00s, E=9.88, V=0.00s, Recovered=False
+2026-02-08 18:53:30,374 - __main__ - INFO - Epoch 1 Summary: Loss=-0.121160, Reward=-5.95±0.04
+2026-02-08 18:53:30,390 - __main__ - INFO - New best model! Reward=-5.95
+2026-02-08 18:53:57,906 - __main__ - INFO - [Epoch 2/100] Episode 1/4: R=-5.86, T=5.00s, E=8.65, V=0.00s, Recovered=False
+2026-02-08 18:54:25,121 - __main__ - INFO - [Epoch 2/100] Episode 2/4: R=-5.87, T=5.00s, E=8.66, V=0.00s, Recovered=False
+2026-02-08 18:54:52,164 - __main__ - INFO - [Epoch 2/100] Episode 3/4: R=-5.90, T=5.00s, E=8.97, V=0.00s, Recovered=False
+2026-02-08 18:55:19,530 - __main__ - INFO - [Epoch 2/100] Episode 4/4: R=-6.02, T=5.00s, E=10.20, V=0.00s, Recovered=False
+2026-02-08 18:55:19,605 - __main__ - INFO - Epoch 2 Summary: Loss=-0.159905, Reward=-5.91±0.06
+2026-02-08 18:55:19,610 - __main__ - INFO - New best model! Reward=-5.91
+2026-02-08 18:55:47,046 - __main__ - INFO - [Epoch 3/100] Episode 1/4: R=-6.04, T=5.00s, E=10.42, V=0.00s, Recovered=False
+2026-02-08 18:56:14,431 - __main__ - INFO - [Epoch 3/100] Episode 2/4: R=-6.05, T=5.00s, E=10.47, V=0.00s, Recovered=False
+2026-02-08 18:56:41,199 - __main__ - INFO - [Epoch 3/100] Episode 3/4: R=-5.89, T=5.00s, E=8.91, V=0.00s, Recovered=False
+2026-02-08 18:57:07,897 - __main__ - INFO - [Epoch 3/100] Episode 4/4: R=-5.84, T=5.00s, E=8.45, V=0.00s, Recovered=False
+2026-02-08 18:57:07,971 - __main__ - INFO - Epoch 3 Summary: Loss=-0.322542, Reward=-5.96±0.09
+2026-02-08 18:57:34,636 - __main__ - INFO - [Epoch 4/100] Episode 1/4: R=-5.89, T=5.00s, E=8.85, V=0.00s, Recovered=False
+2026-02-08 18:58:01,404 - __main__ - INFO - [Epoch 4/100] Episode 2/4: R=-5.85, T=5.00s, E=8.54, V=0.00s, Recovered=False
+2026-02-08 18:58:28,079 - __main__ - INFO - [Epoch 4/100] Episode 3/4: R=-5.99, T=5.00s, E=9.90, V=0.00s, Recovered=False
+2026-02-08 18:58:54,672 - __main__ - INFO - [Epoch 4/100] Episode 4/4: R=-5.93, T=5.00s, E=9.26, V=0.00s, Recovered=False
+2026-02-08 18:58:54,746 - __main__ - INFO - Epoch 4 Summary: Loss=-0.219107, Reward=-5.91±0.05
+2026-02-08 18:59:21,652 - __main__ - INFO - [Epoch 5/100] Episode 1/4: R=-5.93, T=5.00s, E=9.28, V=0.00s, Recovered=False
+2026-02-08 18:59:48,454 - __main__ - INFO - [Epoch 5/100] Episode 2/4: R=-5.94, T=5.00s, E=9.44, V=0.00s, Recovered=False
+2026-02-08 19:00:15,352 - __main__ - INFO - [Epoch 5/100] Episode 3/4: R=-5.88, T=5.00s, E=8.78, V=0.00s, Recovered=False
+2026-02-08 19:00:42,435 - __main__ - INFO - [Epoch 5/100] Episode 4/4: R=-6.00, T=5.00s, E=10.00, V=0.00s, Recovered=False
+2026-02-08 19:00:42,508 - __main__ - INFO - Epoch 5 Summary: Loss=-0.122180, Reward=-5.94±0.04
+2026-02-08 19:01:09,330 - __main__ - INFO - [Epoch 6/100] Episode 1/4: R=-5.82, T=5.00s, E=8.23, V=0.00s, Recovered=False
+2026-02-08 19:01:40,045 - __main__ - INFO - [Epoch 6/100] Episode 2/4: R=-5.87, T=5.00s, E=8.70, V=0.00s, Recovered=False
+2026-02-08 19:02:07,642 - __main__ - INFO - [Epoch 6/100] Episode 3/4: R=-5.91, T=5.00s, E=9.11, V=0.00s, Recovered=False
+2026-02-08 19:02:35,170 - __main__ - INFO - [Epoch 6/100] Episode 4/4: R=-5.90, T=5.00s, E=9.02, V=0.00s, Recovered=False
+2026-02-08 19:02:37,896 - __main__ - INFO - Epoch 6 Summary: Loss=-0.103169, Reward=-5.88±0.03
+2026-02-08 19:02:37,903 - __main__ - INFO - New best model! Reward=-5.88
+2026-02-08 19:03:06,142 - __main__ - INFO - [Epoch 7/100] Episode 1/4: R=-5.91, T=5.00s, E=9.06, V=0.00s, Recovered=False
+2026-02-08 19:03:33,695 - __main__ - INFO - [Epoch 7/100] Episode 2/4: R=-5.91, T=5.00s, E=9.09, V=0.00s, Recovered=False
+2026-02-08 19:04:01,685 - __main__ - INFO - [Epoch 7/100] Episode 3/4: R=-5.79, T=5.00s, E=7.94, V=0.00s, Recovered=False
+2026-02-08 19:04:30,298 - __main__ - INFO - [Epoch 7/100] Episode 4/4: R=-5.90, T=5.00s, E=8.95, V=0.00s, Recovered=False
+2026-02-08 19:04:30,691 - __main__ - INFO - Epoch 7 Summary: Loss=-0.170874, Reward=-5.88±0.05
+2026-02-08 19:04:30,695 - __main__ - INFO - New best model! Reward=-5.88
+2026-02-08 19:04:59,161 - __main__ - INFO - [Epoch 8/100] Episode 1/4: R=-5.94, T=5.00s, E=9.42, V=0.00s, Recovered=False
+2026-02-08 19:05:26,776 - __main__ - INFO - [Epoch 8/100] Episode 2/4: R=-6.08, T=5.00s, E=9.30, V=0.30s, Recovered=False
+2026-02-08 19:05:54,075 - __main__ - INFO - [Epoch 8/100] Episode 3/4: R=-5.86, T=5.00s, E=8.60, V=0.00s, Recovered=False
+2026-02-08 19:06:21,285 - __main__ - INFO - [Epoch 8/100] Episode 4/4: R=-5.93, T=5.00s, E=9.25, V=0.00s, Recovered=False
+2026-02-08 19:06:21,392 - __main__ - INFO - Epoch 8 Summary: Loss=-0.041852, Reward=-5.95±0.08
+2026-02-08 19:06:48,860 - __main__ - INFO - [Epoch 9/100] Episode 1/4: R=-5.94, T=5.00s, E=9.39, V=0.00s, Recovered=False
+2026-02-08 19:07:16,210 - __main__ - INFO - [Epoch 9/100] Episode 2/4: R=-5.72, T=5.00s, E=7.23, V=0.00s, Recovered=False
+2026-02-08 19:07:43,800 - __main__ - INFO - [Epoch 9/100] Episode 3/4: R=-5.87, T=5.00s, E=8.65, V=0.00s, Recovered=False
+2026-02-08 19:08:11,059 - __main__ - INFO - [Epoch 9/100] Episode 4/4: R=-5.92, T=5.00s, E=9.22, V=0.00s, Recovered=False
+2026-02-08 19:08:11,134 - __main__ - INFO - Epoch 9 Summary: Loss=-0.233691, Reward=-5.86±0.08
+2026-02-08 19:08:11,140 - __main__ - INFO - New best model! Reward=-5.86
+2026-02-08 19:08:38,511 - __main__ - INFO - [Epoch 10/100] Episode 1/4: R=-6.13, T=5.00s, E=9.35, V=0.40s, Recovered=False
+2026-02-08 19:09:06,061 - __main__ - INFO - [Epoch 10/100] Episode 2/4: R=-5.99, T=5.00s, E=9.90, V=0.00s, Recovered=False
+2026-02-08 19:09:33,983 - __main__ - INFO - [Epoch 10/100] Episode 3/4: R=-5.83, T=5.00s, E=8.26, V=0.00s, Recovered=False
+2026-02-08 19:10:02,615 - __main__ - INFO - [Epoch 10/100] Episode 4/4: R=-6.16, T=5.00s, E=11.63, V=0.00s, Recovered=False
+2026-02-08 19:10:02,694 - __main__ - INFO - Epoch 10 Summary: Loss=-0.304520, Reward=-6.03±0.13
+2026-02-08 19:10:02,701 - __main__ - INFO - Saved checkpoint to policy_fast.pth
+2026-02-08 19:10:30,214 - __main__ - INFO - [Epoch 11/100] Episode 1/4: R=-5.81, T=5.00s, E=8.13, V=0.00s, Recovered=False
+2026-02-08 19:10:57,707 - __main__ - INFO - [Epoch 11/100] Episode 2/4: R=-5.83, T=5.00s, E=8.27, V=0.00s, Recovered=False
+2026-02-08 19:11:25,700 - __main__ - INFO - [Epoch 11/100] Episode 3/4: R=-5.83, T=5.00s, E=8.28, V=0.00s, Recovered=False
+2026-02-08 19:11:31,106 - __main__ - WARNING - Empty response for command: get_state
+2026-02-08 19:11:31,107 - __main__ - ERROR - Failed to get state from simulator
+2026-02-08 19:11:31,107 - __main__ - INFO - [Epoch 11/100] Episode 4/4: R=-5.11, T=5.00s, E=1.14, V=0.00s, Recovered=False
+2026-02-08 19:11:31,397 - __main__ - INFO - Epoch 11 Summary: Loss=0.251015, Reward=-5.65±0.31
+2026-02-08 19:11:31,406 - __main__ - INFO - New best model! Reward=-5.65
+2026-02-08 19:12:00,471 - __main__ - INFO - [Epoch 12/100] Episode 1/4: R=-5.94, T=5.00s, E=9.39, V=0.00s, Recovered=False
+2026-02-08 19:12:28,966 - __main__ - INFO - [Epoch 12/100] Episode 2/4: R=-5.88, T=5.00s, E=8.79, V=0.00s, Recovered=False
+2026-02-08 19:12:56,956 - __main__ - INFO - [Epoch 12/100] Episode 3/4: R=-5.92, T=5.00s, E=9.21, V=0.00s, Recovered=False
+2026-02-08 19:13:24,321 - __main__ - INFO - [Epoch 12/100] Episode 4/4: R=-5.82, T=5.00s, E=8.20, V=0.00s, Recovered=False
+2026-02-08 19:13:24,404 - __main__ - INFO - Epoch 12 Summary: Loss=-0.110266, Reward=-5.89±0.05
+2026-02-08 19:13:51,711 - __main__ - INFO - [Epoch 13/100] Episode 1/4: R=-6.02, T=5.00s, E=10.21, V=0.00s, Recovered=False
