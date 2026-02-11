@@ -123,7 +123,7 @@ class SimulatorClient:
     """
     
     def __init__(self, host: str = "127.0.0.1", port: int = 5005, 
-                 timeout: float = 1.0, max_retries: int = 3):
+                 timeout: float = 2.0, max_retries: int = 5):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -174,6 +174,9 @@ class SimulatorClient:
                 
                 if not response_bytes:
                     logger.warning(f"Empty response for command: {cmd_dict.get('cmd')}")
+                    if retry < self.max_retries:
+                        time.sleep(0.2 * (retry + 1))   # 0.2s, 0.4s, 0.6s, 0.8s, 1.0s
+                        return self._send_command(cmd_dict, retry + 1)
                     return None
                 
                 # Parse JSON response
@@ -185,14 +188,14 @@ class SimulatorClient:
         except socket.timeout:
             logger.warning(f"Socket timeout for command: {cmd_dict.get('cmd')}")
             if retry < self.max_retries:
-                time.sleep(0.1)
+                time.sleep(0.2 * (retry + 1))
                 return self._send_command(cmd_dict, retry + 1)
             return None
             
         except Exception as e:
             logger.error(f"Communication error: {e}")
             if retry < self.max_retries:
-                time.sleep(0.1)
+                time.sleep(0.2 * (retry + 1))
                 return self._send_command(cmd_dict, retry + 1)
             raise RuntimeError(f"Failed to communicate with simulator: {e}")
     
@@ -415,6 +418,7 @@ class PolicyNetwork(nn.Module):
         var = std.pow(2)
         log_prob = -0.5 * (((z - mean) ** 2) / var + 2 * log_std + np.log(2 * np.pi))
         log_prob = log_prob.sum(dim=-1)
+        log_prob = log_prob - (2 * (np.log(2) - z - F.softplus(-2 * z))).sum(dim=-1)
         
         # Compute entropy
         entropy = 0.5 * (torch.log(2 * np.pi * var) + 1).sum(dim=-1)
@@ -604,9 +608,33 @@ class REINFORCEAgent:
         """
         # Initialize platform state
         phi0, theta0, phi_dot0, theta_dot0 = initial_state
-        self.sim.set_state(phi0, theta0, phi_dot0, theta_dot0, 0.0, 0.0)
+        for _attempt in range(10):
+            resp = self.sim.set_state(phi0, theta0, phi_dot0, theta_dot0, 0.0, 0.0)
+            if resp is not None:
+                break
+            logger.warning(f"set_state failed (attempt {_attempt+1}/10), retrying...")
+            time.sleep(0.3)
         self.sim.set_currents([0.0, 0.0, 0.0, 0.0])
-        time.sleep(0.02)  # Allow state to be applied
+        time.sleep(0.05)
+
+        last_state = None
+        for _warmup in range(20):              # up to 20 × 0.2s = 4 seconds
+            last_state = self.sim.get_state()
+            if last_state is not None:
+                break
+            logger.warning(f"Warm-up get_state failed (attempt {_warmup+1}/20), retrying...")
+            time.sleep(0.2)
+
+        if last_state is None:                 # simulator truly unreachable
+            logger.error("Simulator did not respond after warm-up; skipping episode")
+            return dummy_metrics, []           # skip gracefully, don't crash
+
+        # Mid-episode failure now reuses last good state instead of breaking
+        state = self.sim.get_state()
+        if state is None:
+            state = last_state                 # reuse last known — episode continues
+        else:
+            last_state = state
         
         # Episode variables
         t = 0.0
@@ -621,8 +649,14 @@ class REINFORCEAgent:
             # Get current state
             state = self.sim.get_state()
             if state is None:
-                logger.error("Failed to get state from simulator")
-                break
+                logger.warning("Failed to get state; using last known state and skipping step")
+                if last_state is None:
+                    logger.error("No state available at all; aborting episode")
+                    break
+            # Skip just this one step, episode continues
+            time.sleep(self.dt)
+            t += self.dt
+            continue
             
             last_state = state
             obs = state.to_observation()
@@ -648,7 +682,8 @@ class REINFORCEAgent:
                 action = np.clip(action + noise, self.i_min, self.i_max)
             
             # Apply action
-            self.sim.set_currents(action.tolist())
+            if self.sim.set_currents(action.tolist()) is None:
+                logger.warning("set_currents failed this step; simulator retains previous currents")
             
             # Accumulate actuation effort: E += sum(I_i^2) * dt
             actuation_effort += np.sum(action ** 2) * self.dt
@@ -723,11 +758,20 @@ class REINFORCEAgent:
         
         # Normalize returns for stability
         returns_mean = returns_tensor.mean()
-        returns_std = returns_tensor.std() + 1e-8
-        returns_normalized = (returns_tensor - returns_mean) / returns_std
+        self._return_history.extend(returns)
+        baseline_mean = float(np.mean(self._return_history))
+        if len(self._return_history) >= 2:
+            baseline_mean = float(np.mean(self._return_history))
+            baseline_std  = float(np.std(self._return_history)) + 1e-8
+        else:
+            baseline_mean = float(returns_tensor.mean().item())   # safe fallback
+            baseline_std  = 1.0
+        returns_normalized = (returns_tensor - baseline_mean) / baseline_std
         
         # Policy gradient loss: -E[log π(a|s) * R]
-        loss = -(log_prob_tensor * returns_normalized).mean()
+        pg_loss       = -(log_prob_tensor * returns_normalized).mean()
+        entropy_bonus = -log_prob_tensor.mean()   # positive when policy is uncertain
+        loss          = pg_loss - 0.01 * entropy_bonus
         
         # Optimization step
         self.optimizer.zero_grad()
@@ -794,10 +838,13 @@ class REINFORCEAgent:
             avg_reward = np.mean(epoch_rewards)
             std_reward = np.std(epoch_rewards)
             
-            logger.info(
-                f"Epoch {epoch} Summary: "
-                f"Loss={loss:.6f}, Reward={avg_reward:.2f}±{std_reward:.2f}"
-            )
+            if loss is None:
+                logger.warning(f"Epoch {epoch} Summary: Loss=N/A (no valid trajectories), ...")
+            else:
+                logger.info(
+                    f"Epoch {epoch} Summary: "
+                    f"Loss={loss:.6f}, Reward={avg_reward:.2f}±{std_reward:.2f}"
+                )
             
             # Save checkpoints
             if model_path and (epoch % save_every == 0 or epoch == n_epochs):
