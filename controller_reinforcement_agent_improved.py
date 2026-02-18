@@ -175,7 +175,7 @@ class SimulatorClient:
                 if not response_bytes:
                     logger.warning(f"Empty response for command: {cmd_dict.get('cmd')}")
                     if retry < self.max_retries:
-                        time.sleep(0.2 * (retry + 1))   # 0.2s, 0.4s, 0.6s, 0.8s, 1.0s
+                        time.sleep(0.2 * (retry + 1))
                         return self._send_command(cmd_dict, retry + 1)
                     return None
                 
@@ -414,12 +414,15 @@ class PolicyNetwork(nn.Module):
         normalized = torch.clamp((actions - offset) / scale, -0.999999, 0.999999)
         z = 0.5 * torch.log((1 + normalized) / (1 - normalized))  # atanh
         
-        # Compute log probability
+        # Compute log probability of the pre-squash Gaussian
         var = std.pow(2)
         log_prob = -0.5 * (((z - mean) ** 2) / var + 2 * log_std + np.log(2 * np.pi))
         log_prob = log_prob.sum(dim=-1)
-        log_prob = log_prob - (2 * (np.log(2) - z - F.softplus(-2 * z))).sum(dim=-1)
-        
+
+        # For on-policy REINFORCE we use the Gaussian log prob directly.
+        # No tanh correction needed (that's for off-policy algorithms like SAC).
+        # The policy gradient estimator only needs consistent probability ratios.
+
         # Compute entropy
         entropy = 0.5 * (torch.log(2 * np.pi * var) + 1).sum(dim=-1)
         
@@ -524,6 +527,8 @@ class REINFORCEAgent:
         # Training statistics
         self.episode_count = 0
         self.recent_rewards = deque(maxlen=100)
+        # Running return history for stable normalisation (last 200 episodes)
+        self._return_history = deque(maxlen=200)
         
         logger.info(f"Initialized REINFORCE agent with policy: {self.policy}")
     
@@ -606,7 +611,7 @@ class REINFORCEAgent:
             metrics: EpisodeMetrics with performance statistics
             trajectory: List of (obs, action, log_prob) tuples
         """
-        # Initialize platform state
+        # Initialize platform state - retry until simulator acknowledges
         phi0, theta0, phi_dot0, theta_dot0 = initial_state
         for _attempt in range(10):
             resp = self.sim.set_state(phi0, theta0, phi_dot0, theta_dot0, 0.0, 0.0)
@@ -615,50 +620,51 @@ class REINFORCEAgent:
             logger.warning(f"set_state failed (attempt {_attempt+1}/10), retrying...")
             time.sleep(0.3)
         self.sim.set_currents([0.0, 0.0, 0.0, 0.0])
-        time.sleep(0.05)
+        time.sleep(0.05)  # Allow state to be applied
 
+        # Warm-up: wait until simulator responds with a valid state before
+        # entering the control loop.  This handles the case where the sim is
+        # momentarily busy after set_state.
         last_state = None
-        for _warmup in range(20):              # up to 20 × 0.2s = 4 seconds
+        for _warmup in range(20):
             last_state = self.sim.get_state()
             if last_state is not None:
                 break
             logger.warning(f"Warm-up get_state failed (attempt {_warmup+1}/20), retrying...")
             time.sleep(0.2)
 
-        if last_state is None:                 # simulator truly unreachable
+        if last_state is None:
             logger.error("Simulator did not respond after warm-up; skipping episode")
-            return dummy_metrics, []           # skip gracefully, don't crash
+            # Return a zero-effort failed episode so training can continue
+            dummy = EpisodeMetrics(
+                recovery_time=self.max_episode_time,
+                actuation_effort=0.0,
+                vibration_time=0.0,
+                recovered=False,
+                reward=-self.max_episode_time * self.w_time,
+                steps=0,
+                initial_state=initial_state.copy(),
+                final_state=initial_state.copy()
+            )
+            return dummy, []
 
-        # Mid-episode failure now reuses last good state instead of breaking
-        state = self.sim.get_state()
-        if state is None:
-            state = last_state                 # reuse last known — episode continues
-        else:
-            last_state = state
-        
         # Episode variables
         t = 0.0
         recovery_time = None
         actuation_effort = 0.0
         vibration_time = 0.0
         trajectory = []
-        last_state = None
-        
+
         # Control loop
         while t < self.max_episode_time:
-            # Get current state
+            # Get current state - on failure reuse last known state for this step
             state = self.sim.get_state()
             if state is None:
-                logger.warning("Failed to get state; using last known state and skipping step")
-                if last_state is None:
-                    logger.error("No state available at all; aborting episode")
-                    break
-            # Skip just this one step, episode continues
-            time.sleep(self.dt)
-            t += self.dt
-            continue
-            
-            last_state = state
+                logger.warning("get_state failed mid-episode; reusing last known state")
+                state = last_state   # keep simulator loop alive
+            else:
+                last_state = state
+
             obs = state.to_observation()
             
             # Check if recovered
@@ -681,7 +687,7 @@ class REINFORCEAgent:
                 noise = np.random.normal(0, exploration_noise, size=action.shape)
                 action = np.clip(action + noise, self.i_min, self.i_max)
             
-            # Apply action
+            # Apply action - if it fails the sim keeps its last currents, log and move on
             if self.sim.set_currents(action.tolist()) is None:
                 logger.warning("set_currents failed this step; simulator retains previous currents")
             
@@ -689,10 +695,11 @@ class REINFORCEAgent:
             actuation_effort += np.sum(action ** 2) * self.dt
             
             # Record trajectory for training
-            if training and log_prob is not None:
-                # Need to recompute log_prob with policy for the actual action
+            if training:
+                # Recompute log_prob with policy for the actual action (WITH gradients)
                 obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(self.device)
                 action_tensor = torch.from_numpy(action).unsqueeze(0).to(self.device)
+                # DO NOT use no_grad() - we need gradients for training!
                 log_prob_tensor, _ = self.policy.evaluate_actions(
                     obs_tensor, action_tensor
                 )
@@ -755,24 +762,30 @@ class REINFORCEAgent:
         # Convert to tensors
         log_prob_tensor = torch.cat(log_probs).to(self.device)
         returns_tensor = torch.tensor(returns, dtype=torch.float32, device=self.device)
-        
-        # Normalize returns for stability
-        returns_mean = returns_tensor.mean()
+
+        # Normalize returns using a RUNNING baseline rather than within-batch std.
+        # When all episodes fail with nearly identical rewards the within-batch std
+        # collapses to ~0, turning the normalised returns into pure noise and making
+        # the gradient useless.  A running mean/std over recent history gives a
+        # stable, meaningful signal even early in training.
         self._return_history.extend(returns)
-        baseline_mean = float(np.mean(self._return_history))
-        if len(self._return_history) >= 2:
-            baseline_mean = float(np.mean(self._return_history))
-            baseline_std  = float(np.std(self._return_history)) + 1e-8
+        
+        # Use raw returns (no normalization) for REINFORCE.
+        # Normalization can cause gradient direction randomization when all
+        # returns are similar, leading to negative loss and preventing learning.
+        # The baseline subtraction helps reduce variance, but we skip division
+        # by std when it's too small.
+        if len(self._return_history) >= 10:
+            baseline = float(np.mean(self._return_history))
         else:
-            baseline_mean = float(returns_tensor.mean().item())   # safe fallback
-            baseline_std  = 1.0
-        returns_normalized = (returns_tensor - baseline_mean) / baseline_std
+            baseline = 0.0  # No baseline for first few updates
         
-        # Policy gradient loss: -E[log π(a|s) * R]
-        pg_loss       = -(log_prob_tensor * returns_normalized).mean()
-        entropy_bonus = -log_prob_tensor.mean()   # positive when policy is uncertain
-        loss          = pg_loss - 0.01 * entropy_bonus
-        
+        returns_centered = returns_tensor - baseline
+
+        # Policy gradient loss: -E[log π(a|s) * (R - baseline)]
+        # This is the standard REINFORCE loss with baseline subtraction
+        loss = -(log_prob_tensor * returns_centered).mean()
+
         # Optimization step
         self.optimizer.zero_grad()
         loss.backward()
@@ -837,9 +850,13 @@ class REINFORCEAgent:
             loss = self.update_policy(epoch_trajectories)
             avg_reward = np.mean(epoch_rewards)
             std_reward = np.std(epoch_rewards)
-            
+
             if loss is None:
-                logger.warning(f"Epoch {epoch} Summary: Loss=N/A (no valid trajectories), ...")
+                logger.warning(
+                    f"Epoch {epoch} Summary: "
+                    f"Loss=N/A (no valid trajectories this epoch), "
+                    f"Reward={avg_reward:.2f}±{std_reward:.2f}"
+                )
             else:
                 logger.info(
                     f"Epoch {epoch} Summary: "

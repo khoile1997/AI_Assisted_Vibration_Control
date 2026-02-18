@@ -144,21 +144,22 @@ python controller_reinforcement_agent_improved.py \
 
 ### Evaluation
 
-Evaluate trained policy:
-```bash
-python controller_reinforcement_agent_improved.py \
-    --mode eval \
-    --model_path policy.pth \
-    --n_eval 100
-```
-
 Load and continue training:
 ```bash
-python controller_reinforcement_agent_improved.py \
-    --mode train \
+# RESUME FROM BEST MODEL
+python controller_reinforcement_agent_improved.py --mode train \
     --load_model \
-    --model_path policy.pth \
-    --epochs 100
+    --model_path policy_fixed.best.pth \
+    --epochs 100 \
+    --eps_per_epoch 4 \
+    --max_time 5.0 \
+    --dt 0.1 \
+    --exploration_noise 0.1
+
+# EVALUATE CURRENT MODEL
+python controller_reinforcement_agent_improved.py --mode eval \
+    --model_path policy_fixed.pth.best \
+    --n_eval 50
 ```
 
 ### Command-Line Arguments
