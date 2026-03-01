@@ -529,6 +529,8 @@ class REINFORCEAgent:
         self.recent_rewards = deque(maxlen=100)
         # Running return history for stable normalisation (last 200 episodes)
         self._return_history = deque(maxlen=200)
+        # Separate history for failed episodes to compute stable baseline
+        self._failed_return_history = deque(maxlen=200)
         
         logger.info(f"Initialized REINFORCE agent with policy: {self.policy}")
     
@@ -768,17 +770,23 @@ class REINFORCEAgent:
         # collapses to ~0, turning the normalised returns into pure noise and making
         # the gradient useless.  A running mean/std over recent history gives a
         # stable, meaningful signal even early in training.
+        # Separate tracking: failed episodes vs. all episodes
+        # This prevents successful episodes from corrupting the baseline
         self._return_history.extend(returns)
         
-        # Use raw returns (no normalization) for REINFORCE.
-        # Normalization can cause gradient direction randomization when all
-        # returns are similar, leading to negative loss and preventing learning.
-        # The baseline subtraction helps reduce variance, but we skip division
-        # by std when it's too small.
-        if len(self._return_history) >= 10:
-            baseline = float(np.mean(self._return_history))
+        # Track failed episodes separately (returns < 0 means failed)
+        failed_returns = [r for r in returns if r < 0]
+        if failed_returns:
+            self._failed_return_history.extend(failed_returns)
+        
+        # Use ONLY failed episodes for baseline to avoid instability
+        # When successes occur (R >> 0), using them in baseline makes
+        # subsequent failures look anomalously bad, causing negative loss
+        if len(self._failed_return_history) >= 10:
+            baseline = float(np.mean(self._failed_return_history))
         else:
-            baseline = 0.0  # No baseline for first few updates
+            # Fallback: use all returns if not enough failures yet
+            baseline = float(np.mean(self._return_history)) if len(self._return_history) >= 5 else 0.0
         
         returns_centered = returns_tensor - baseline
 
