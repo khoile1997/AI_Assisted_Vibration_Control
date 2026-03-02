@@ -789,7 +789,21 @@ class REINFORCEAgent:
             baseline = float(np.mean(self._return_history)) if len(self._return_history) >= 5 else 0.0
         
         returns_centered = returns_tensor - baseline
+        # TEMPORARY DEBUG LOGGING
+        import sys
+        print(f"\n=== DEBUG Epoch ===", file=sys.stderr)
+        print(f"Returns: {returns}", file=sys.stderr)
+        print(f"Baseline (from failed): {baseline:.4f}", file=sys.stderr)
+        print(f"Returns centered: {returns_centered.detach().cpu().numpy()}", file=sys.stderr)
+        print(f"Log probs: {log_prob_tensor.detach().cpu().numpy()[:4]}", file=sys.stderr)
+        print(f"Product: {(log_prob_tensor * returns_centered).detach().cpu().numpy()[:4]}", file=sys.stderr)
 
+        # Policy gradient loss: -E[log π(a|s) * (R - baseline)]
+        # This is the standard REINFORCE loss with baseline subtraction
+        loss = -(log_prob_tensor * returns_centered).mean()
+
+        print(f"Loss before negation: {(log_prob_tensor * returns_centered).mean().item():.6f}", file=sys.stderr)
+        print(f"Final loss: {loss.item():.6f}\n", file=sys.stderr)
         # Policy gradient loss: -E[log π(a|s) * (R - baseline)]
         # This is the standard REINFORCE loss with baseline subtraction
         loss = -(log_prob_tensor * returns_centered).mean()
