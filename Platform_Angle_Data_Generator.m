@@ -7,7 +7,7 @@ g = 9.81; % gravitational acceleration in mm/s^2
 L1 = 10; % lateral length of rectangle in mm
 L2 = 10; % depth of rectangle in mm
 
-n = 200; % number of datapoints/measurements to be generated
+n = 2000; % number of datapoints/measurements to be generated
 training_data=[];
 
 for i=1:n
@@ -29,7 +29,7 @@ end
 T = array2table(training_data, ...
     'VariableNames', {'ax','ay','az','motor1_diplacement[mm]','motor2_diplacement[mm]','motor3_diplacement[mm]','motor4_diplacement[mm]'});
 % Write to CSV in current folder
-csv_filename = 'accelerometer_data_for_training.csv';
+csv_filename = 'vibration_data_updated.csv';
 writetable(T, csv_filename);
 
 function [a_body, eul_rad, eul_deg, R_b2w] = compute_accel_from_corners(corners, g)
