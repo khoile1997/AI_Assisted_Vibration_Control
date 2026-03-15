@@ -44,6 +44,129 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 @dataclass
+
+
+def convert_sensor_data_to_state(row):
+    """
+    Convert MATLAB-generated sensor data to platform state.
+    
+    This function implements the EXACT INVERSE of MATLAB's compute_accel_from_corners.
+    
+    MATLAB format has columns: [ax, ay, az, motor1_diplacement[mm], motor2_diplacement[mm], 
+                                 motor3_diplacement[mm], motor4_diplacement[mm]]
+    Where:
+        ax, ay, az: Accelerometer readings in m/s² (NOT mm/s²!)
+        motor1-4_diplacement: Motor displacements in mm
+    
+    MATLAB platform geometry:
+        L1 = 10 mm (lateral length, along X)
+        L2 = 10 mm (depth, along Y)
+        
+        Corner layout:
+        Motor 1: [0,  0,  x1]  (origin)
+        Motor 2: [L1, 0,  x2]  (along X)
+        Motor 3: [L1, L2, x3]  (diagonal)
+        Motor 4: [0,  L2, x4]  (along Y)
+    
+    Returns:
+        dict: {'phi': roll (rad), 'theta': pitch (rad), 
+               'phi_dot': roll rate (rad/s), 'theta_dot': pitch rate (rad/s)}
+    """
+    # MATLAB platform dimensions (CRITICAL: must match MATLAB code!)
+    L1 = 10.0  # mm (lateral length)
+    L2 = 10.0  # mm (depth)
+    
+    # Extract motor displacements (in mm)
+    # Note: MATLAB has typo "diplacement" instead of "displacement"
+    x1 = float(row.get('motor1_diplacement[mm]', row.get('x1', 0)))
+    x2 = float(row.get('motor2_diplacement[mm]', row.get('x2', 0)))
+    x3 = float(row.get('motor3_diplacement[mm]', row.get('x3', 0)))
+    x4 = float(row.get('motor4_diplacement[mm]', row.get('x4', 0)))
+    
+    # Extract accelerometer readings (in m/s² - already correct unit!)
+    ax = float(row['ax'])
+    ay = float(row['ay'])
+    az = float(row['az'])
+    
+    # Reconstruct corner positions in MATLAB's coordinate system
+    corners = np.array([
+        [0,  0,  x1],  # Motor 1 at origin
+        [L1, 0,  x2],  # Motor 2 along X
+        [L1, L2, x3],  # Motor 3 at diagonal
+        [0,  L2, x4]   # Motor 4 along Y
+    ], dtype=np.float64)
+    
+    # Compute platform orientation from corners using rotation matrix method
+    # (Same method as MATLAB's compute_accel_from_corners)
+    
+    # Extract corner points
+    A, B, C, D = corners[0], corners[1], corners[2], corners[3]
+    
+    # Build in-plane axes
+    v1 = B - A  # Edge A->B (x-axis direction)
+    v2 = D - A  # Edge A->D (y-axis direction)
+    
+    x_axis = v1 / np.linalg.norm(v1)
+    
+    # Gram-Schmidt orthogonalization
+    v2_orth = v2 - (np.dot(v2, x_axis) * x_axis)
+    y_axis = v2_orth / np.linalg.norm(v2_orth)
+    
+    # Z-axis (normal to platform)
+    z_axis = np.cross(x_axis, y_axis)
+    z_axis = z_axis / np.linalg.norm(z_axis)
+    
+    # Rotation matrix: body to world
+    R_b2w = np.column_stack([x_axis, y_axis, z_axis])
+    
+    # Extract Euler angles (Z-Y-X intrinsic convention)
+    r31 = R_b2w[2, 0]
+    r32 = R_b2w[2, 1]
+    r33 = R_b2w[2, 2]
+    r21 = R_b2w[1, 0]
+    r11 = R_b2w[0, 0]
+    
+    # Pitch
+    theta = np.arcsin(np.clip(-r31, -1.0, 1.0))
+    cos_theta = np.cos(theta)
+    
+    # Roll and Yaw
+    if abs(cos_theta) > 1e-6:
+        phi = np.arctan2(r32, r33)    # Roll
+        psi = np.arctan2(r21, r11)    # Yaw (not used)
+    else:
+        phi = 0.0  # Gimbal lock
+        psi = np.arctan2(-R_b2w[0, 1], R_b2w[1, 1])
+    
+    # Estimate angular rates from accelerometer deviation
+    # Compute what static accelerometer should read
+    g = 9.81  # m/s²
+    g_world = np.array([0, 0, -g])
+    R_w2b = R_b2w.T
+    a_body_static = R_w2b @ g_world
+    
+    # Deviation from static reading indicates motion
+    a_measured = np.array([ax, ay, az])
+    a_deviation = a_measured - a_body_static
+    
+    # Estimate rates from deviation (simplified)
+    # Roll rate affects lateral (Y) acceleration
+    # Pitch rate affects longitudinal (X) acceleration
+    phi_dot = a_deviation[1] / (L1 / 2000.0)    # Convert mm to m
+    theta_dot = a_deviation[0] / (L2 / 2000.0)
+    
+    # Limit to reasonable range
+    phi_dot = np.clip(phi_dot, -0.5, 0.5)
+    theta_dot = np.clip(theta_dot, -0.5, 0.5)
+    
+    return {
+        'phi': float(phi),
+        'theta': float(theta),
+        'phi_dot': float(phi_dot),
+        'theta_dot': float(theta_dot)
+    }
+
+
 class PlatformState:
     """Represents the complete state of the platform at a given time."""
     phi: float          # Roll angle (rad)
@@ -535,32 +658,80 @@ class REINFORCEAgent:
         logger.info(f"Initialized REINFORCE agent with policy: {self.policy}")
     
     def _load_initial_conditions(self, csv_path: str) -> np.ndarray:
-        """Load initial conditions from CSV file."""
+        """
+        Load initial conditions from CSV file.
+        
+        Supports two formats:
+        1. Old format: columns [phi, theta, phi_dot, theta_dot]
+        2. New format: columns [ax, ay, az, x1, x2, x3, x4]
+        
+        The new format is automatically converted to the old format.
+        """
         try:
             df = pd.read_csv(csv_path)
         except FileNotFoundError:
             raise FileNotFoundError(
                 f"Initial conditions file not found: {csv_path}\n"
-                "Expected CSV with columns: phi, theta, phi_dot, theta_dot"
+                "Expected CSV with columns: phi, theta, phi_dot, theta_dot OR ax, ay, az, x1, x2, x3, x4"
             )
         
         # Case-insensitive column matching
         cols = {c.lower(): c for c in df.columns}
-        required = ["phi", "theta", "phi_dot", "theta_dot"]
         
-        for col in required:
-            if col not in cols:
-                raise ValueError(
-                    f"Missing required column '{col}' in {csv_path}\n"
-                    f"Available columns: {list(df.columns)}"
-                )
+        # Check for old format (phi, theta, phi_dot, theta_dot)
+        old_format_required = ["phi", "theta", "phi_dot", "theta_dot"]
+        has_old_format = all(col in cols for col in old_format_required)
         
-        # Extract and return as numpy array
-        states = df[[cols[c] for c in required]].to_numpy(dtype=np.float32)
+        # Check for new format (ax, ay, az, x1, x2, x3, x4)
+        new_format_required = ["ax", "ay", "az", "x1", "x2", "x3", "x4"]
+        has_new_format = all(col in cols for col in new_format_required)
+        
+        if has_old_format:
+            # Old format - use directly
+            logger.info(f"Loading {len(df)} initial conditions (old format: phi, theta, phi_dot, theta_dot)")
+            states = df[[cols[c] for c in old_format_required]].to_numpy(dtype=np.float32)
+            
+        elif has_new_format:
+            # New format - convert sensor data to platform states
+            logger.info(f"Loading {len(df)} initial conditions (new format: ax, ay, az, x1-x4)")
+            logger.info("Converting sensor data to platform states...")
+            
+            # Convert each row
+            converted_states = []
+            for _, row in df.iterrows():
+                state_dict = convert_sensor_data_to_state(row)
+                converted_states.append([
+                    state_dict['phi'],
+                    state_dict['theta'],
+                    state_dict['phi_dot'],
+                    state_dict['theta_dot']
+                ])
+            
+            states = np.array(converted_states, dtype=np.float32)
+            
+            # Log sample conversion for verification
+            if len(df) > 0:
+                sample_row = df.iloc[0]
+                sample_state = states[0]
+                logger.info(f"Sample conversion verification:")
+                logger.info(f"  Input:  x1={sample_row['x1']:.2f}mm, x2={sample_row['x2']:.2f}mm, "
+                          f"x3={sample_row['x3']:.2f}mm, x4={sample_row['x4']:.2f}mm")
+                logger.info(f"          ax={sample_row['ax']:.1f}mm/s², ay={sample_row['ay']:.1f}mm/s², "
+                          f"az={sample_row['az']:.1f}mm/s²")
+                logger.info(f"  Output: φ={sample_state[0]:.4f}rad, θ={sample_state[1]:.4f}rad, "
+                          f"φ̇={sample_state[2]:.4f}rad/s, θ̇={sample_state[3]:.4f}rad/s")
+                logger.info(f"Converted {len(states)} sensor readings successfully")
+        else:
+            raise ValueError(
+                f"CSV format not recognized. Expected either:\n"
+                f"  Old format: {old_format_required}\n"
+                f"  New format: {new_format_required}\n"
+                f"Found columns: {list(df.columns)}"
+            )
         
         # Validate values
         if np.any(np.isnan(states)) or np.any(np.isinf(states)):
-            raise ValueError("Initial conditions contain NaN or Inf values")
+            raise ValueError("Initial conditions contain NaN or Inf values after conversion")
         
         return states
     
@@ -754,8 +925,14 @@ class REINFORCEAgent:
         
         for metrics, trajectory in batch_trajectories:
             R = metrics.reward
-            for obs, action, log_prob_tensor in trajectory:
-                log_probs.append(log_prob_tensor)
+            
+            # CRITICAL FIX: Use episode-level log prob, not timestep-level
+            # REINFORCE should have ONE gradient per episode, not per timestep
+            # Sum log probs across the trajectory (equivalent to product of probabilities)
+            trajectory_log_probs = [log_prob for obs, action, log_prob in trajectory]
+            if trajectory_log_probs:
+                episode_log_prob = torch.stack(trajectory_log_probs).sum()
+                log_probs.append(episode_log_prob)
                 returns.append(R)
         
         if not log_probs:
@@ -789,21 +966,9 @@ class REINFORCEAgent:
             baseline = float(np.mean(self._return_history)) if len(self._return_history) >= 5 else 0.0
         
         returns_centered = returns_tensor - baseline
-        # TEMPORARY DEBUG LOGGING
-        import sys
-        print(f"\n=== DEBUG Epoch ===", file=sys.stderr)
-        print(f"Returns: {returns}", file=sys.stderr)
-        print(f"Baseline (from failed): {baseline:.4f}", file=sys.stderr)
-        print(f"Returns centered: {returns_centered.detach().cpu().numpy()}", file=sys.stderr)
-        print(f"Log probs: {log_prob_tensor.detach().cpu().numpy()[:4]}", file=sys.stderr)
-        print(f"Product: {(log_prob_tensor * returns_centered).detach().cpu().numpy()[:4]}", file=sys.stderr)
-
         # Policy gradient loss: -E[log π(a|s) * (R - baseline)]
         # This is the standard REINFORCE loss with baseline subtraction
         loss = -(log_prob_tensor * returns_centered).mean()
-
-        print(f"Loss before negation: {(log_prob_tensor * returns_centered).mean().item():.6f}", file=sys.stderr)
-        print(f"Final loss: {loss.item():.6f}\n", file=sys.stderr)
         # Policy gradient loss: -E[log π(a|s) * (R - baseline)]
         # This is the standard REINFORCE loss with baseline subtraction
         loss = -(log_prob_tensor * returns_centered).mean()

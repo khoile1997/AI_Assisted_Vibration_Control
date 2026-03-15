@@ -1,9 +1,14 @@
 """
-real_time_platform_sim.py
+real_time_platform_sim_enhanced.py
 
-Real-time simulator for a rectangular platform with 4 corner actuators.
+Enhanced Real-time simulator for a rectangular platform with 4 corner actuators.
 
-Features:
+NEW FEATURES:
+- 3D visualization of platform motion in real-time
+- Corner displacement graphs (x1, x2, x3, x4) correlated with motor currents
+- Improved visualization layout with multiple subplots
+
+Original Features:
 - Small-angle roll (phi) and pitch (theta) dynamics plus vertical translation (z).
 - Actuators modeled as velocity-dependent dampers where damping coefficient = k_c * current.
 - Actuator current limits (saturation) and per-actuator force limit (F_max).
@@ -35,6 +40,8 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # -------------------------
 # Simulator core
@@ -78,275 +85,187 @@ class PlatformSimulatorRT:
         self.I_min, self.I_max = I_limits
         self.F_max = float(F_max)
 
-        # corner coordinates (x,y) (front-left, front-right, rear-left, rear-right)
-        hx = Lx / 2.0
-        hy = Ly / 2.0
-        self.corners = np.array(
-            [
-                [+hx, -hy],  # front-left
-                [+hx, +hy],  # front-right
-                [-hx, -hy],  # rear-left
-                [-hx, +hy],  # rear-right
-            ]
-        )  # shape (4,2)
+        # corners in platform frame (x=forward, y=right):
+        #   1: front-left   (+Lx/2, -Ly/2)
+        #   2: front-right  (+Lx/2, +Ly/2)
+        #   3: rear-left    (-Lx/2, -Ly/2)
+        #   4: rear-right   (-Lx/2, +Ly/2)
+        self.corners_flat = np.array([
+            [+Lx / 2, -Ly / 2],
+            [+Lx / 2, +Ly / 2],
+            [-Lx / 2, -Ly / 2],
+            [-Lx / 2, +Ly / 2]
+        ])
 
-        # state: phi, theta, z, phi_dot, theta_dot, z_dot
-        self.state = np.zeros(6)
-        # commands / external inputs
-        self.currents = np.zeros(4)  # commanded currents (A)
+        # State
+        self.state = np.zeros(6)  # [phi, theta, z, phi_dot, theta_dot, z_dot]
+        self.currents = np.zeros(4)
         self.external = {"force_z": 0.0, "moment_x": 0.0, "moment_y": 0.0}
-        # locking for thread-safety
-        self.lock = threading.RLock()
 
     def reset(self, phi=0.0, theta=0.0, z=0.0, phi_dot=0.0, theta_dot=0.0, z_dot=0.0):
-        with self.lock:
-            self.state[:] = np.array([phi, theta, z, phi_dot, theta_dot, z_dot], dtype=float)
+        self.state = np.array([phi, theta, z, phi_dot, theta_dot, z_dot], dtype=float)
 
-    def set_currents(self, currents):
-        with self.lock:
-            arr = np.asarray(currents, dtype=float).reshape(4)
-            # apply current limits
-            arr = np.clip(arr, self.I_min, self.I_max)
-            self.currents = arr
+    def set_currents(self, I):
+        I = np.array(I, dtype=float).flatten()
+        if I.shape[0] != 4:
+            raise ValueError("currents must be array of size 4")
+        # saturate
+        I = np.clip(I, self.I_min, self.I_max)
+        self.currents = I
 
     def set_state(self, state_dict):
-        with self.lock:
-            # Accept partial dictionaries
-            s = dict(state_dict)
-            phi = s.get("phi", self.state[0])
-            theta = s.get("theta", self.state[1])
-            z = s.get("z", self.state[2])
-            phi_dot = s.get("phi_dot", self.state[3])
-            theta_dot = s.get("theta_dot", self.state[4])
-            z_dot = s.get("z_dot", self.state[5])
-            self.state[:] = np.array([phi, theta, z, phi_dot, theta_dot, z_dot], dtype=float)
+        """
+        Set simulator state from a dict with some or all of: phi, theta, z, phi_dot, theta_dot, z_dot
+        """
+        mapping = {"phi": 0, "theta": 1, "z": 2, "phi_dot": 3, "theta_dot": 4, "z_dot": 5}
+        for k, idx in mapping.items():
+            if k in state_dict:
+                self.state[idx] = float(state_dict[k])
 
     def set_external(self, ext_dict):
-        with self.lock:
-            for k in ("force_z", "moment_x", "moment_y"):
-                if k in ext_dict:
-                    self.external[k] = float(ext_dict[k])
+        for k in ("force_z", "moment_x", "moment_y"):
+            if k in ext_dict:
+                self.external[k] = float(ext_dict[k])
 
     def set_limits(self, I_min=None, I_max=None, F_max=None):
-        with self.lock:
-            if I_min is not None:
-                self.I_min = float(I_min)
-            if I_max is not None:
-                self.I_max = float(I_max)
-            if F_max is not None:
-                self.F_max = float(F_max)
-            # enforce current clipping on stored currents
-            self.currents = np.clip(self.currents, self.I_min, self.I_max)
+        if I_min is not None:
+            self.I_min = float(I_min)
+        if I_max is not None:
+            self.I_max = float(I_max)
+        if F_max is not None:
+            self.F_max = float(F_max)
 
-    def _compute_force_terms(self, state, currents):
+    def get_state(self):
         """
-        Compute per-actuator forces and the aggregated contributions:
-         - forces: 4-element array (N) applied upward on platform (positive up)
-         - sums needed for dynamics: S_c, S_cx, S_cy, S_cxx, S_cyy, S_cxy
-        Includes actuator force saturation (per-actuator magnitude limited to F_max).
+        Return current state + currents as a dict (sensor readout).
+        Add noise if noise_std > 0.
         """
-        # map current to damping coefficient (positive)
-        c = self.k_c * np.clip(currents, self.I_min, self.I_max)
-        x = self.corners[:, 0]
-        y = self.corners[:, 1]
-        # velocities
-        phi_dot = state[3]
-        theta_dot = state[4]
-        z_dot = state[5]
-
-        # corner vertical velocity v_i = z_dot - phi_dot*y_i + theta_dot*x_i
-        v = z_dot - phi_dot * y + theta_dot * x
-
-        # ideal damping force (opposes velocity): F_i = -c_i * v_i
-        F = -c * v
-
-        # apply per-actuator force saturation
-        if self.F_max is not None and self.F_max > 0.0:
-            F = np.clip(F, -self.F_max, self.F_max)
-
-        # For aggregated sums we need sums over c times coordinates, BUT after saturation
-        # the effective "c" for aggregated linear terms is not straightforward if some actuators saturated.
-        # We'll compute aggregated sums using the actual forces F and velocities to derive equivalent terms:
-        # sum_F = sum F_i = -S_c * z_dot + S_cy * phi_dot - S_cx * theta_dot  (if no saturation)
-        # Rather than try to invert, compute sums directly from F and known v, phi_dot, theta_dot:
-        S_F = np.sum(F)
-        # compute terms used in torque equations:
-        S_yF = np.sum(y * F)   # contributes to roll moment
-        S_xF = np.sum(x * F)   # contributes to pitch moment (with sign)
-        # compute entries for damping matrix approximations when needed by linear terms:
-        # We'll compute the sums of c*x^2 etc using original c (pre-saturation) for the linear parts but
-        # for accuracy when saturation present, we will use the forces F to compute torques/moments exactly.
-        # However we still return c-based sums for use in non-saturated linear approximation when required.
-        S_c = np.sum(c)
-        S_cx = np.sum(c * x)
-        S_cy = np.sum(c * y)
-        S_cxx = np.sum(c * x * x)
-        S_cyy = np.sum(c * y * y)
-        S_cxy = np.sum(c * x * y)
-
+        s = self.state.copy()
+        if self.noise_std > 0:
+            s += np.random.randn(6) * self.noise_std
         return {
-            "F": F,
-            "v": v,
-            "S_F": S_F,
-            "S_xF": S_xF,
-            "S_yF": S_yF,
-            "S_c": S_c,
-            "S_cx": S_cx,
-            "S_cy": S_cy,
-            "S_cxx": S_cxx,
-            "S_cyy": S_cyy,
-            "S_cxy": S_cxy,
+            "state": {
+                "phi": float(s[0]),
+                "theta": float(s[1]),
+                "z": float(s[2]),
+                "phi_dot": float(s[3]),
+                "theta_dot": float(s[4]),
+                "z_dot": float(s[5]),
+            },
+            "currents": list(self.currents)
         }
 
-    def _derivatives(self, state, currents, external=None):
+    def get_corner_displacements(self):
         """
-        Given current state and currents, return state derivatives:
-        state: [phi, theta, z, phi_dot, theta_dot, z_dot]
-        returns: state_dot of same shape
+        Calculate vertical displacement of each corner relative to neutral position.
+        
+        Returns:
+            x1, x2, x3, x4: vertical displacements of corners 1-4 (meters)
         """
-        if external is None:
-            external = {"force_z": 0.0, "moment_x": 0.0, "moment_y": 0.0}
+        phi, theta, z = self.state[0], self.state[1], self.state[2]
+        
+        # Corner positions in platform frame
+        corners = self.corners_flat  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        
+        # Vertical displacement = z + (rotation effects)
+        # For small angles: dz ≈ z - x*sin(theta) + y*sin(phi)
+        # Or more precisely: dz ≈ z - x*theta + y*phi
+        
+        x1 = z - corners[0, 0] * theta + corners[0, 1] * phi
+        x2 = z - corners[1, 0] * theta + corners[1, 1] * phi
+        x3 = z - corners[2, 0] * theta + corners[2, 1] * phi
+        x4 = z - corners[3, 0] * theta + corners[3, 1] * phi
+        
+        return x1, x2, x3, x4
 
-        phi, theta, z, phi_dot, theta_dot, z_dot = state
-        terms = self._compute_force_terms(state, currents)
+    def compute_actuator_forces(self):
+        """
+        Compute forces from 4 actuators based on currents and corner velocities.
+        Each actuator: F_i = -k_c * I_i * z_dot_i
+        where z_dot_i is vertical velocity at corner i.
+        """
+        phi, theta, z, phi_dot, theta_dot, z_dot = self.state
+        corners = self.corners_flat
 
-        # Rotational damping torque from actuators: compute actual torque directly using forces:
-        # Mx = sum y_i * F_i
-        # My = -sum x_i * F_i  (sign chosen consistent with earlier conventions)
-        Mx_from_F = np.sum(self.corners[:, 1] * terms["F"])
-        My_from_F = -np.sum(self.corners[:, 0] * terms["F"])
+        # Vertical velocities at corners (small angle approximation)
+        # z_dot_i = z_dot - x_i*theta_dot + y_i*phi_dot
+        z_dot_corners = np.array([
+            z_dot - corners[i, 0] * theta_dot + corners[i, 1] * phi_dot
+            for i in range(4)
+        ])
 
-        # Include additional rotational viscous damping B_rot and stiffness K_rot:
-        vel = np.array([phi_dot, theta_dot])
-        torque_visc = self.b_rot * vel  # element-wise (diagonal)
-        torque_stiff = self.k_rot * np.array([phi, theta])
+        # Actuator forces: F_i = -k_c * I_i * z_dot_i
+        F_raw = -self.k_c * self.currents * z_dot_corners
 
-        # Total rotational moments: from actuators + viscous + stiffness + external
-        # Note: actuator contribution Mx_from_F, My_from_F already includes sign (forces are upward positive).
-        # We collect RHS = actuator_moments - torque_visc - torque_stiff + external_moments
-        Mx_total = Mx_from_F - torque_visc[0] - torque_stiff[0] + external.get("moment_x", 0.0)
-        My_total = My_from_F - torque_visc[1] - torque_stiff[1] + external.get("moment_y", 0.0)
+        # Saturate per-actuator force
+        F = np.clip(F_raw, -self.F_max, self.F_max)
+        return F
 
-        # rotational accelerations:
-        phi_dd = Mx_total / self.I[0]
-        theta_dd = My_total / self.I[1]
+    def rhs(self, state_vec):
+        """
+        Right-hand side of dynamics: dstate/dt = rhs(state)
+        state_vec = [phi, theta, z, phi_dot, theta_dot, z_dot]
+        """
+        phi, theta, z, phi_dot, theta_dot, z_dot = state_vec
 
-        # Vertical dynamics:
-        # sum forces on z (positive up) = sum F_i + (-b_z * z_dot) + (-k_z * z) + external force
-        sum_F = terms["S_F"]
-        z_dd = (sum_F - self.b_z * z_dot - self.k_z * z + external.get("force_z", 0.0)) / self.mass
+        # Actuator forces
+        F = self.compute_actuator_forces()
 
-        # Pack derivatives: [phi_dot, theta_dot, z_dot, phi_dd, theta_dd, z_dd]
-        state_dot = np.array([phi_dot, theta_dot, z_dot, phi_dd, theta_dd, z_dd], dtype=float)
-        return state_dot
+        # Total force and moments from actuators
+        corners = self.corners_flat
+        F_z_act = np.sum(F)
+        M_x_act = np.sum(F * corners[:, 1])  # sum of F_i * y_i
+        M_y_act = np.sum(F * corners[:, 0])  # sum of F_i * x_i
+
+        # External loads
+        F_z_ext = self.external["force_z"]
+        M_x_ext = self.external["moment_x"]
+        M_y_ext = self.external["moment_y"]
+
+        # Equations of motion (small angle approximation)
+        # Rotational
+        ddphi = (M_x_act + M_x_ext - self.b_rot[0] * phi_dot - self.k_rot[0] * phi) / self.I[0]
+        ddtheta = (M_y_act + M_y_ext - self.b_rot[1] * theta_dot - self.k_rot[1] * theta) / self.I[1]
+
+        # Vertical
+        ddz = (F_z_act + F_z_ext - self.b_z * z_dot - self.k_z * z) / self.mass
+
+        dstate = np.array([phi_dot, theta_dot, z_dot, ddphi, ddtheta, ddz])
+        return dstate
 
     def step(self, dt):
         """
-        Advance state by dt using RK4 with current commanded currents and external inputs.
-        Returns sensor readings (with optional noise) as a dict.
+        Integrate state forward by dt using RK4.
         """
-        with self.lock:
-            s0 = self.state.copy()
-            currents = self.currents.copy()
-            external = dict(self.external)
+        s = self.state
+        k1 = self.rhs(s)
+        k2 = self.rhs(s + 0.5 * dt * k1)
+        k3 = self.rhs(s + 0.5 * dt * k2)
+        k4 = self.rhs(s + dt * k3)
+        self.state = s + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
-        # RK4 using lambdas that close over currents/external
-        k1 = self._derivatives(s0, currents, external)
-        k2 = self._derivatives(s0 + 0.5 * dt * k1, currents, external)
-        k3 = self._derivatives(s0 + 0.5 * dt * k2, currents, external)
-        k4 = self._derivatives(s0 + dt * k3, currents, external)
-        s_new = s0 + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
-
-        with self.lock:
-            self.state = s_new
-
-            # sensor readings
-            phi, theta, z, phi_dot, theta_dot, z_dot = self.state
-            if self.noise_std > 0.0:
-                ang_noise = np.random.normal(0.0, self.noise_std, 3)
-                rate_noise = np.random.normal(0.0, self.noise_std, 3)
-            else:
-                ang_noise = np.zeros(3)
-                rate_noise = np.zeros(3)
-
-            sensors = {
-                "phi": phi + ang_noise[0],
-                "theta": theta + ang_noise[1],
-                "z": z + ang_noise[2],
-                "phi_dot": phi_dot + rate_noise[0],
-                "theta_dot": theta_dot + rate_noise[1],
-                "z_dot": z_dot + rate_noise[2],
-                "currents": self.currents.copy(),
-                "external": dict(self.external),
-                "timestamp": time.time(),
-            }
-        return sensors
-
-    def get_state(self):
-        with self.lock:
-            s = {
-                "state": {
-                    "phi": float(self.state[0]),
-                    "theta": float(self.state[1]),
-                    "z": float(self.state[2]),
-                    "phi_dot": float(self.state[3]),
-                    "theta_dot": float(self.state[4]),
-                    "z_dot": float(self.state[5]),
-                },
-                "currents": list(self.currents.copy()),
-                "limits": {"I_min": self.I_min, "I_max": self.I_max, "F_max": self.F_max},
-                "external": dict(self.external),
-                "timestamp": time.time(),
-            }
-            return s
 
 # -------------------------
-# Simple TCP JSON server to control the sim from another program
+# TCP server for external control
 # -------------------------
-class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
-    """
-    Simple request handler expecting JSON commands terminated by newline.
-    Responds with JSON terminated by newline.
-    """
+class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
-        # receive until connection closed
-        data = b""
-        # set small timeout so we don't block forever
-        self.request.settimeout(0.2)
-        try:
-            while True:
-                chunk = self.request.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-        except socket.timeout:
-            pass  # proceed with whatever we got
-
-        if not data:
-            return
-
-        # Accept multiple JSON objects separated by newline; process the first valid
-        text = data.decode("utf-8").strip()
-        responses = []
-        for line in text.splitlines():
-            if not line.strip():
-                continue
+        while True:
             try:
+                line = self.rfile.readline()
+                if not line:
+                    break
+                line = line.decode("utf-8").strip()
+                if not line:
+                    continue
                 cmd = json.loads(line)
+                response = self.server.process_command(cmd)
+                response_str = json.dumps(response) + "\n"
+                self.wfile.write(response_str.encode("utf-8"))
             except Exception as e:
-                responses.append({"error": f"invalid json: {str(e)}"})
-                continue
-
-            # process command
-            resp = self.server.process_command(cmd)
-            responses.append(resp)
-
-        # send all responses as JSON lines
-        out_text = "\n".join(json.dumps(r) for r in responses) + "\n"
-        try:
-            self.request.sendall(out_text.encode("utf-8"))
-        except Exception:
-            pass
+                err_resp = {"error": str(e)}
+                self.wfile.write((json.dumps(err_resp) + "\n").encode("utf-8"))
+                break
 
 
 class ControlTCPServer(socketserver.ThreadingTCPServer):
@@ -393,7 +312,7 @@ class ControlTCPServer(socketserver.ThreadingTCPServer):
             return {"error": str(e)}
 
 # -------------------------
-# Real-time plotting / main loop
+# Enhanced Real-time plotting / main loop
 # -------------------------
 class RealTimeApp:
     def __init__(self, simulator: PlatformSimulatorRT, dt=0.01, host="127.0.0.1", port=5005):
@@ -413,6 +332,7 @@ class RealTimeApp:
         self.theta_hist = np.zeros(npoints)
         self.z_hist = np.zeros(npoints)
         self.currents_hist = np.zeros((npoints, 4))
+        self.x_hist = np.zeros((npoints, 4))  # Corner displacements
 
     def start_server(self):
         # start TCP server in background thread
@@ -434,117 +354,197 @@ class RealTimeApp:
         self.start_server()
         self.running = True
 
-        # set up matplotlib figure
+        # set up matplotlib figure with enhanced layout
         plt.style.use("seaborn-v0_8-darkgrid")
-        fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-        ax1, ax2, ax3 = axs
+        fig = plt.figure(figsize=(16, 10))
+        
+        # Create grid: 3D plot on left, time series on right
+        gs = fig.add_gridspec(3, 2, width_ratios=[1.2, 1], hspace=0.3, wspace=0.3)
+        
+        # 3D visualization (spans all rows on left)
+        ax_3d = fig.add_subplot(gs[:, 0], projection='3d')
+        
+        # Time series plots on right
+        ax_angles = fig.add_subplot(gs[0, 1])
+        ax_currents = fig.add_subplot(gs[1, 1], sharex=ax_angles)
+        ax_displacements = fig.add_subplot(gs[2, 1], sharex=ax_angles)
 
-        # lines
-        (line_phi,) = ax1.plot(self.times, self.phi_hist, label="phi (rad)")
-        (line_theta,) = ax1.plot(self.times, self.theta_hist, label="theta (rad)")
-        ax1.set_ylabel("angle [rad]")
-        ax1.legend(loc="upper right")
+        # === 3D Platform Visualization ===
+        ax_3d.set_xlabel('X (m)')
+        ax_3d.set_ylabel('Y (m)')
+        ax_3d.set_zlabel('Z (m)')
+        ax_3d.set_title('Platform 3D Visualization', fontsize=14, fontweight='bold')
+        
+        # Set fixed limits for 3D plot
+        ax_3d.set_xlim([-0.6, 0.6])
+        ax_3d.set_ylim([-0.4, 0.4])
+        ax_3d.set_zlim([-0.15, 0.15])
+        
+        # Initial platform corners
+        platform_plot = None
+        corner_scatters = []
+        
+        # === Angles Plot ===
+        line_phi, = ax_angles.plot(self.times, self.phi_hist, 'b-', label='φ (roll)', linewidth=1.5)
+        line_theta, = ax_angles.plot(self.times, self.theta_hist, 'r-', label='θ (pitch)', linewidth=1.5)
+        ax_angles.set_ylabel('Angle (rad)', fontsize=10)
+        ax_angles.legend(loc='upper right', fontsize=9)
+        ax_angles.grid(True, alpha=0.3)
+        ax_angles.set_title('Platform Angles', fontsize=11, fontweight='bold')
 
-        (line_phi_dot,) = ax2.plot(self.times, np.zeros_like(self.times), label="phi_dot")
-        (line_theta_dot,) = ax2.plot(self.times, np.zeros_like(self.times), label="theta_dot")
-        (line_z_dot,) = ax2.plot(self.times, np.zeros_like(self.times), label="z_dot")
-        ax2.set_ylabel("rates [rad/s, m/s]")
-        ax2.legend(loc="upper right")
-
-        line_currents = []
-        colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+        # === Currents Plot ===
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+        lines_currents = []
         for i in range(4):
-            ln, = ax3.plot(self.times, self.currents_hist[:, i], label=f"I{i+1}", color=colors[i])
-            line_currents.append(ln)
-        ax3.set_ylabel("current [A]")
-        ax3.set_xlabel("time [s]")
-        ax3.legend(loc="upper right")
+            line, = ax_currents.plot(self.times, self.currents_hist[:, i], 
+                                     color=colors[i], label=f'I{i+1}', linewidth=1.5)
+            lines_currents.append(line)
+        ax_currents.set_ylabel('Current (A)', fontsize=10)
+        ax_currents.legend(loc='upper right', fontsize=9, ncol=2)
+        ax_currents.grid(True, alpha=0.3)
+        ax_currents.set_title('Motor Currents', fontsize=11, fontweight='bold')
 
-        plt.tight_layout()
+        # === Corner Displacements Plot ===
+        lines_displacements = []
+        for i in range(4):
+            line, = ax_displacements.plot(self.times, self.x_hist[:, i],
+                                          color=colors[i], label=f'x{i+1}', linewidth=1.5)
+            lines_displacements.append(line)
+        ax_displacements.set_xlabel('Time (s)', fontsize=10)
+        ax_displacements.set_ylabel('Displacement (m)', fontsize=10)
+        ax_displacements.legend(loc='upper right', fontsize=9, ncol=2)
+        ax_displacements.grid(True, alpha=0.3)
+        ax_displacements.set_title('Corner Vertical Displacements', fontsize=11, fontweight='bold')
 
-        last_time = time.time()
+        fig.suptitle('Enhanced Platform Simulator - Real-time Visualization', 
+                     fontsize=16, fontweight='bold')
 
         def update(frame):
-            nonlocal last_time
-            # advance simulation enough steps to catch up real time or run at fixed dt
-            now = time.time()
-            elapsed = now - last_time
-            # Limit step count to avoid spiral
-            max_steps = int(min(10, max(1, elapsed / self.dt)))
-            for _ in range(max_steps):
-                sensors = self.sim.step(self.dt)
-                last_time = time.time()
+            if not self.running:
+                return
 
-                # append to history buffers
-                self.times = np.append(self.times[1:], sensors["timestamp"] - now)  # relative times
-                self.phi_hist = np.append(self.phi_hist[1:], sensors["phi"])
-                self.theta_hist = np.append(self.theta_hist[1:], sensors["theta"])
-                self.z_hist = np.append(self.z_hist[1:], sensors["z"])
-                self.currents_hist = np.vstack((self.currents_hist[1:, :], sensors["currents"]))
+            # step simulator
+            self.sim.step(self.dt)
 
-            # update plotted data
+            # get current state
+            phi, theta, z = self.sim.state[:3]
+            phi_dot, theta_dot, z_dot = self.sim.state[3:]
+            currents = self.sim.currents
+            x1, x2, x3, x4 = self.sim.get_corner_displacements()
+
+            # roll data
+            self.phi_hist = np.roll(self.phi_hist, -1)
+            self.theta_hist = np.roll(self.theta_hist, -1)
+            self.z_hist = np.roll(self.z_hist, -1)
+            self.currents_hist = np.roll(self.currents_hist, -1, axis=0)
+            self.x_hist = np.roll(self.x_hist, -1, axis=0)
+
+            self.phi_hist[-1] = phi
+            self.theta_hist[-1] = theta
+            self.z_hist[-1] = z
+            self.currents_hist[-1, :] = currents
+            self.x_hist[-1, :] = [x1, x2, x3, x4]
+
+            # === Update 3D Platform ===
+            ax_3d.cla()
+            ax_3d.set_xlabel('X (m)')
+            ax_3d.set_ylabel('Y (m)')
+            ax_3d.set_zlabel('Z (m)')
+            ax_3d.set_title('Platform 3D Visualization', fontsize=14, fontweight='bold')
+            ax_3d.set_xlim([-0.6, 0.6])
+            ax_3d.set_ylim([-0.4, 0.4])
+            ax_3d.set_zlim([-0.15, 0.15])
+            
+            # Calculate corner positions in 3D
+            corners_2d = self.sim.corners_flat
+            
+            # Transform corners based on current angles
+            # For small angles: rotation matrix approximation
+            corners_3d = np.zeros((4, 3))
+            for i in range(4):
+                x_local = corners_2d[i, 0]
+                y_local = corners_2d[i, 1]
+                
+                # Position after rotation (small angle approx)
+                x_world = x_local
+                y_world = y_local
+                z_world = z - x_local * theta + y_local * phi
+                
+                corners_3d[i] = [x_world, y_world, z_world]
+            
+            # Draw platform as a filled polygon
+            verts = [corners_3d[[0, 1, 3, 2]]]  # Correct order for filled quad
+            platform_collection = Poly3DCollection(verts, alpha=0.7, facecolor='cyan', edgecolor='darkblue', linewidth=2)
+            ax_3d.add_collection3d(platform_collection)
+            
+            # Draw corners as spheres
+            for i, corner in enumerate(corners_3d):
+                ax_3d.scatter(*corner, color=colors[i], s=100, marker='o', edgecolor='black', linewidth=1.5)
+                ax_3d.text(corner[0], corner[1], corner[2]+0.02, f'  {i+1}', fontsize=10, fontweight='bold')
+            
+            # Draw vertical lines from corners to ground
+            for corner in corners_3d:
+                ax_3d.plot([corner[0], corner[0]], [corner[1], corner[1]], [corner[2], -0.15], 
+                          'k--', alpha=0.3, linewidth=0.8)
+            
+            # Draw ground plane
+            xx, yy = np.meshgrid(np.linspace(-0.6, 0.6, 3), np.linspace(-0.4, 0.4, 3))
+            zz = np.full_like(xx, -0.15)
+            ax_3d.plot_surface(xx, yy, zz, alpha=0.1, color='gray')
+            
+            # Set view angle
+            ax_3d.view_init(elev=20, azim=45)
+
+            # === Update Time Series Plots ===
             line_phi.set_ydata(self.phi_hist)
             line_theta.set_ydata(self.theta_hist)
-            line_phi_dot.set_ydata(np.gradient(self.phi_hist, self.times + 1e-12))  # numerical derivative approximate
-            line_theta_dot.set_ydata(np.gradient(self.theta_hist, self.times + 1e-12))
-            line_z_dot.set_ydata(np.gradient(self.z_hist, self.times + 1e-12))
-            for i in range(4):
-                line_currents[i].set_ydata(self.currents_hist[:, i])
 
-            # keep x-limits fixed
-            ax1.relim(); ax1.autoscale_view(scalex=False, scaley=True)
-            ax2.relim(); ax2.autoscale_view(scalex=False, scaley=True)
-            ax3.relim(); ax3.autoscale_view(scalex=False, scaley=True)
-            return [line_phi, line_theta, line_phi_dot, line_theta_dot, line_z_dot] + line_currents
+            for i, line in enumerate(lines_currents):
+                line.set_ydata(self.currents_hist[:, i])
 
-        ani = FuncAnimation(plt.gcf(), update, interval=int(self.dt * 1000), blit=False)
-        try:
-            print("Starting real-time plot. Close the plot window to exit.")
-            plt.show()
-        finally:
-            print("Shutting down server and exiting...")
-            self.stop_server()
-            self.running = False
+            for i, line in enumerate(lines_displacements):
+                line.set_ydata(self.x_hist[:, i])
+
+            # Auto-scale y-axes
+            ax_angles.relim()
+            ax_angles.autoscale_view(scalex=False)
+            ax_currents.relim()
+            ax_currents.autoscale_view(scalex=False)
+            ax_displacements.relim()
+            ax_displacements.autoscale_view(scalex=False)
+
+            return []
+
+        ani = FuncAnimation(fig, update, interval=int(self.dt * 1000), blit=False, cache_frame_data=False)
+        plt.tight_layout()
+        plt.show()
+
+        self.running = False
+        self.stop_server()
+
 
 # -------------------------
-# Example client usage (separate program)
+# Client example
 # -------------------------
-CLIENT_EXAMPLE = r"""
-# Example control client to send commands to the simulator (run separately)
-import socket, json
+CLIENT_EXAMPLE = """
+import socket
+import json
 
-HOST = "127.0.0.1"
-PORT = 5005
-
-def send_cmd(cmd):
-    s = socket.create_connection((HOST, PORT), timeout=1.0)
-    txt = json.dumps(cmd) + "\n"
-    s.sendall(txt.encode('utf-8'))
-    # read response
-    resp = b""
-    try:
-        while True:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            resp += chunk
-    except Exception:
-        pass
+def send_command(cmd_dict, host='127.0.0.1', port=5005):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    s.sendall((json.dumps(cmd_dict) + '\\n').encode('utf-8'))
+    response = s.recv(4096).decode('utf-8')
     s.close()
-    print(resp.decode('utf-8'))
+    return json.loads(response)
 
-# set currents
-send_cmd({"cmd":"set_currents", "currents":[1.0, 1.0, 0.5, 0.5]})
+# Example: set currents
+resp = send_command({"cmd": "set_currents", "currents": [0.5, -0.3, 0.2, -0.1]})
+print(resp)
 
-# get state
-send_cmd({"cmd":"get_state"})
-
-# apply an external push upward on platform
-send_cmd({"cmd":"set_external", "force_z": 20.0})
-
-# set actuator limits
-send_cmd({"cmd":"set_limits", "I_min": -3.0, "I_max": 3.0, "F_max": 200.0})
-
+# Example: get state
+resp = send_command({"cmd": "get_state"})
+print(resp)
 """
 
 # -------------------------
@@ -575,4 +575,10 @@ if __name__ == "__main__":
     app = RealTimeApp(simulator=sim, dt=0.01, host="127.0.0.1", port=5005)
     print("Example client snippet to control the sim (run separately):")
     print(CLIENT_EXAMPLE)
+    print("\n" + "="*70)
+    print("ENHANCED FEATURES:")
+    print("  - 3D visualization of platform showing real-time motion")
+    print("  - Corner displacement graphs (x1, x2, x3, x4)")
+    print("  - Correlation with motor currents (I1, I2, I3, I4)")
+    print("="*70 + "\n")
     app.run()
