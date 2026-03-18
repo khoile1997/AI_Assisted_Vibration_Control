@@ -1,445 +1,232 @@
-# Active Vibration Control Platform - RL Controller
-
-## Master's Thesis Project: Reinforcement Learning for Platform Stabilization
-
-This repository contains an improved implementation of a reinforcement learning controller for active vibration control of a rectangular platform with 4 electromagnetic actuators.
-
-## 📋 Table of Contents
-
-- [System Overview](#system-overview)
-- [Key Improvements](#key-improvements)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-- [System Architecture](#system-architecture)
-- [Configuration](#configuration)
-- [Results & Evaluation](#results--evaluation)
-- [Troubleshooting](#troubleshooting)
-
-## 🎯 System Overview
-
-The system consists of:
-
-### Hardware (Simulated)
-- **Platform**: Rectangular horizontal platform
-- **Actuators**: 4 electromagnetic motors at corners (current-controlled)
-- **Sensors**: 
-  - Central IMU measuring roll (φ), pitch (θ), and angular rates
-  - 4 current sensors (one per motor)
-
-### Software Components
-1. **Simulator** (`real_time_platform_sim.py`): Real-time physics simulation with TCP/IP control interface
-2. **RL Agent** (`controller_reinforcement_agent_improved.py`): REINFORCE-based policy gradient controller
-3. **Visualization**: Interactive system diagrams and training plots
-
-### State & Action Spaces
-- **State (Observation)**: `[φ, θ, φ̇, θ̇]` - angles and angular rates
-- **Action**: `[I₁, I₂, I₃, I₄]` - motor currents in Amperes
-- **Control Frequency**: 20 Hz (dt = 0.05s)
-
-## ✨ Key Improvements
-
-### Code Quality
-1. **Type Hints & Documentation**: Comprehensive docstrings and type annotations
-2. **Data Classes**: Structured data with `PlatformState` and `EpisodeMetrics`
-3. **Error Handling**: Robust exception handling and connection verification
-4. **Logging**: Professional logging with different levels
-
-### Architecture
-1. **Modular Design**: Separated concerns (client, policy, agent)
-2. **Better Network**: Improved policy network with proper initialization
-3. **Enhanced Training**: Normalized returns, gradient clipping, best model tracking
-4. **Evaluation Tools**: Comprehensive metrics and statistics
-
-### Features
-1. **Auto-retry**: Automatic retry for network communication failures
-2. **Checkpointing**: Save/load models with training state
-3. **Progress Tracking**: Recent reward history and moving averages
-4. **Flexible Configuration**: Command-line arguments for all hyperparameters
-
-## 🚀 Installation
-
-### Requirements
-```bash
-pip install numpy pandas torch
-```
-
-Or use the provided requirements file:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Requirements.txt
-```
-numpy>=1.21.0
-pandas>=1.3.0
-torch>=1.10.0
-```
-
-## 🏁 Quick Start
-
-### 1. Prepare Initial Conditions
-
-Create `vibration_data.csv` with disturbance scenarios:
-
-```csv
-phi,theta,phi_dot,theta_dot
-0.05,0.03,0.1,0.05
--0.04,0.06,-0.08,0.12
-0.08,-0.02,0.15,-0.1
-...
-```
-
-### 2. Start Simulator
-
-In one terminal:
-```bash
-python real_time_platform_sim.py
-```
-
-### 3. Train Agent
-
-In another terminal:
-```bash
-python controller_reinforcement_agent_improved.py --mode train \
-    --epochs 200 \
-    --eps_per_epoch 8 \
-    --lr 1e-3 \
-    --model_path policy.pth
-```
-
-### 4. Evaluate
-
-```bash
-python controller_reinforcement_agent_improved.py --mode eval \
-    --model_path policy.pth \
-    --n_eval 50
-```
-
-## 📖 Usage
-
-### Training
-
-Basic training:
-```bash
-python controller_reinforcement_agent_improved.py --mode train
-```
-
-Advanced training with custom hyperparameters:
-```bash
-python controller_reinforcement_agent_improved.py \
-    --mode train \
-    --epochs 500 \
-    --eps_per_epoch 16 \
-    --lr 5e-4 \
-    --hidden 256 256 \
-    --exploration_noise 0.1 \
-    --w_time 1.0 \
-    --w_effort 0.2 \
-    --w_vibration 0.5 \
-    --bonus 100.0 \
-    --model_path models/policy_v2.pth
-```
-
-### Evaluation
-
-Load and continue training:
-```bash
-# RESUME FROM BEST MODEL
-python controller_reinforcement_agent_improved.py --mode train \
-    --load_model \
-    --model_path policy_fixed.best.pth \
-    --epochs 100 \
-    --eps_per_epoch 4 \
-    --max_time 5.0 \
-    --dt 0.1 \
-    --exploration_noise 0.1
-
-# EVALUATE CURRENT MODEL
-python controller_reinforcement_agent_improved.py --mode eval \
-    --model_path policy_fixed.pth.best \
-    --n_eval 50
-```
-
-### Command-Line Arguments
-
-#### Connection
-- `--host`: Simulator host (default: `127.0.0.1`)
-- `--port`: Simulator port (default: `5005`)
-
-#### Data
-- `--csv`: Path to initial conditions CSV (default: `vibration_data.csv`)
-
-#### Control
-- `--dt`: Control timestep in seconds (default: `0.05`)
-- `--max_time`: Max episode duration in seconds (default: `8.0`)
-- `--i_min`: Minimum motor current in A (default: `-2.0`)
-- `--i_max`: Maximum motor current in A (default: `2.0`)
-
-#### Thresholds
-- `--angle_thresh`: Recovery angle threshold in rad (default: `0.01`)
-- `--rate_thresh`: Recovery rate threshold in rad/s (default: `0.05`)
-- `--motion_rate_thresh`: Excessive motion threshold in rad/s (default: `0.2`)
-- `--recovery_time_thresh`: Fast recovery time for bonus in s (default: `1.0`)
-
-#### Reward Weights
-- `--w_time`: Time penalty weight (default: `1.0`)
-- `--w_effort`: Actuation effort penalty weight (default: `0.1`)
-- `--w_vibration`: Vibration time penalty weight (default: `0.5`)
-- `--bonus`: Fast recovery bonus reward (default: `50.0`)
-
-#### Training
-- `--epochs`: Number of training epochs (default: `200`)
-- `--eps_per_epoch`: Episodes per epoch (default: `8`)
-- `--lr`: Learning rate (default: `1e-3`)
-- `--hidden`: Hidden layer sizes (default: `128 128`)
-- `--exploration_noise`: Exploration noise std (default: `0.05`)
-
-#### Model
-- `--model_path`: Path for model checkpoints (default: `policy.pth`)
-- `--load_model`: Load existing model before train/eval
-- `--n_eval`: Number of evaluation episodes (default: `20`)
-
-## 🏗️ System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PLATFORM DYNAMICS                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │   Rectangular Platform with 4 Corner Actuators      │   │
-│  │                                                      │   │
-│  │   M1 ●────────────● M2    ⚡ Electromagnetic        │   │
-│  │      │            │          Motors                  │   │
-│  │      │    📡 IMU  │       📊 State:                 │   │
-│  │      │   (φ,θ)    │          [φ, θ, φ̇, θ̇]         │   │
-│  │      │            │                                  │   │
-│  │   M3 ●────────────● M4    ⚙️  Currents:             │   │
-│  │                              [I₁, I₂, I₃, I₄]       │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           │ TCP/IP (127.0.0.1:5005)
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    RL CONTROLLER                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Policy Network π(a|s)                   │   │
-│  │  ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐        │   │
-│  │  │Input │──▶│ FC   │──▶│ FC   │──▶│Output│         │   │
-│  │  │ 4D   │   │ 128  │   │ 128  │   │ 4D   │         │   │
-│  │  └──────┘   └──────┘   └──────┘   └──────┘         │   │
-│  │                                                      │   │
-│  │  🎲 Gaussian Policy: a ~ N(μ(s), σ²)               │   │
-│  │  📈 REINFORCE Update: ∇J = E[∇log π(a|s) × R]      │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Data Flow
-
-1. **Measurement**: IMU measures platform state `[φ, θ, φ̇, θ̇]`
-2. **Communication**: State sent via TCP/IP to RL agent
-3. **Policy Evaluation**: Neural network computes action distribution
-4. **Action Selection**: Sample currents `[I₁, I₂, I₃, I₄]` from policy
-5. **Actuation**: Apply currents to electromagnetic motors
-6. **Physics Update**: Platform dynamics evolve
-7. **Trajectory Recording**: Store `(state, action, log_prob)` for training
-8. **Episodic Learning**: Update policy with REINFORCE at episode end
-
-## ⚙️ Configuration
-
-### Reward Function
-
-The episodic reward is designed to encourage fast recovery with minimal energy:
-
-```
-R = -(T × w_t + E × w_a + V × w_v) + B × I
-
-Where:
-  T = Recovery time (s) - or max_episode_time if not recovered
-  E = Actuation effort = ∫ Σ(I_i²) dt
-  V = Vibration time (s) - time with |φ̇| or |θ̇| > 0.2 rad/s
-  I = Recovery indicator (1 if recovered within 1s, else 0)
-  
-Weights:
-  w_t = 1.0   (time penalty)
-  w_a = 0.1   (effort penalty)
-  w_v = 0.5   (vibration penalty)
-  B = 50.0    (recovery bonus)
-```
-
-### Recovery Criteria
-
-Platform is considered "recovered" when:
-- `|φ| ≤ 0.01 rad` AND `|θ| ≤ 0.01 rad` (angles small)
-- `|φ̇| ≤ 0.05 rad/s` AND `|θ̇| ≤ 0.05 rad/s` (rates small)
-
-Fast recovery bonus awarded if recovered within 1.0 second.
-
-### Hyperparameter Tuning Tips
-
-1. **Learning Rate**: Start with `1e-3`, reduce if unstable, increase if slow
-2. **Network Size**: Larger networks (`[256, 256]`) for complex dynamics
-3. **Exploration Noise**: Higher (`0.1-0.2`) early, lower (`0.01-0.05`) later
-4. **Reward Weights**: 
-   - Increase `w_t` to prioritize speed
-   - Increase `w_a` to save energy
-   - Increase `w_v` to reduce vibration
-   - Increase `B` to emphasize fast recovery
-
-## 📊 Results & Evaluation
-
-### Training Metrics
-
-During training, monitor:
-- **Average Reward**: Should increase over epochs
-- **Recovery Rate**: Percentage of episodes with `I=1`
-- **Mean Recovery Time**: Should decrease
-- **Policy Loss**: May fluctuate but trend downward
-
-Example output:
-```
-[Epoch 100/200] Episode 1/8: R=35.2, T=0.8s, Recovered=True
-[Epoch 100/200] Episode 2/8: R=28.5, T=1.2s, Recovered=True
-...
-Epoch 100 Summary: Loss=0.0234, Reward=31.4±5.2
-New best model! Reward=31.4
-```
-
-### Evaluation Output
-
-```
-[Eval 1/50] R=42.3, T=0.65s, Recovered=True
-[Eval 2/50] R=38.7, T=0.85s, Recovered=True
-...
-
-Evaluation Summary:
-                T          E          V          I      reward
-count   50.000000  50.000000  50.000000  50.000000   50.000000
-mean     0.856000   2.341000   0.234000   0.940000   38.234000
-std      0.234000   0.567000   0.098000   0.239000    6.123000
-min      0.450000   1.234000   0.050000   0.000000   22.340000
-25%      0.678000   1.890000   0.167000   1.000000   34.567000
-50%      0.834000   2.234000   0.223000   1.000000   39.123000
-75%      1.023000   2.678000   0.289000   1.000000   42.890000
-max      1.890000   4.123000   0.567000   1.000000   48.234000
-
-Recovery Rate: 94.0%
-```
-
-### Performance Benchmarks
-
-Good performance indicators:
-- **Recovery Rate**: >90%
-- **Mean Recovery Time**: <1.0s
-- **Mean Reward**: >30.0
-- **Actuation Effort**: <3.0
-
-## 🐛 Troubleshooting
-
-### Connection Issues
-
-**Problem**: `Cannot connect to simulator`
-```
-Solution:
-1. Verify simulator is running: ps aux | grep real_time_platform_sim
-2. Check port availability: netstat -an | grep 5005
-3. Try alternative port: --port 5006
-```
-
-### Training Instability
-
-**Problem**: Reward oscillates wildly or diverges
-```
-Solutions:
-1. Reduce learning rate: --lr 5e-4 or --lr 1e-4
-2. Reduce exploration: --exploration_noise 0.01
-3. Check initial conditions in CSV for outliers
-4. Verify simulator is stable independently
-```
-
-### Poor Recovery Performance
-
-**Problem**: Low recovery rate even after training
-```
-Solutions:
-1. Increase training duration: --epochs 500
-2. Increase batch size: --eps_per_epoch 16
-3. Adjust reward weights to emphasize recovery:
-   --w_time 2.0 --bonus 100.0
-4. Check if current limits are appropriate:
-   --i_min -3.0 --i_max 3.0
-5. Verify initial conditions are feasible
-```
-
-### Memory Issues
-
-**Problem**: Out of memory during training
-```
-Solutions:
-1. Reduce network size: --hidden 64 64
-2. Reduce episodes per epoch: --eps_per_epoch 4
-3. Shorten episodes: --max_time 5.0
-```
-
-## 📁 Project Structure
-
-```
-.
-├── controller_reinforcement_agent_improved.py  # Main RL controller
-├── platform_system_diagram.html               # Interactive visualization
-├── README.md                                   # This file
-├── requirements.txt                            # Python dependencies
-├── vibration_data.csv                         # Initial conditions (create this)
-├── policy.pth                                 # Saved model (after training)
-└── evaluation_results.csv                     # Evaluation metrics (after eval)
-```
-
-## 🎓 For Thesis
-
-### Recommended Experiments
-
-1. **Baseline Comparison**: Compare RL controller with PID/LQR
-2. **Ablation Study**: Test impact of each reward component
-3. **Generalization**: Train on subset, test on different disturbances
-4. **Robustness**: Add sensor noise, actuator saturation
-5. **Multi-objective**: Pareto frontier of speed vs. energy
-
-### Figures to Include
-
-1. Platform system diagram (use provided HTML visualization)
-2. Training curves (reward, recovery rate vs. epochs)
-3. Evaluation histograms (recovery time distribution)
-4. State trajectories (φ, θ vs. time for sample episodes)
-5. Action profiles (I₁-I₄ vs. time)
-6. Comparison with baselines
-
-## 📝 Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@mastersthesis{khoile2026vibration,
-  title={Active Vibration Control Using Deep Reinforcement Learning},
-  author={Khoi Le},
-  year={2026},
-  school={San Jose State University}
-}
-```
-
-## 📄 License
-
-Feel free to use and modify for research purposes.
-
-## 🤝 Contributing
-
-This is a thesis project, but suggestions and improvements are welcome!
-
-## ✉️ Contact
-
-For questions or collaboration: [khoi.h.le@sjsu.edu]
+# AI-Assisted Vibration Control of a Platform
+**ME 295B – Master's Project | Mechanical Engineering | San José State University**
+**Author:** Khoi Le | May 2026
+**Committee Chair:** Dr. Freidoon Barez
 
 ---
 
-**Good luck with your project! 🎓🚀**
+## Project Overview
+
+This project develops and evaluates an AI-assisted active vibration control scheme for a
+four-corner actuated platform.  A Proximal Policy Optimisation (PPO) reinforcement-
+learning agent issues continuous commands to four independent electric actuators to
+restore and maintain the platform's horizontal orientation when external seismic or
+harmonic disturbances are applied.  Platform orientation and angular velocity are
+provided by a central IMU; per-motor current draw is monitored by four current sensors.
+
+The reward function penalises long settling times, high actuation effort, and excessive
+angular motion, and awards a scalar bonus when both settling time and peak angular
+velocity fall below pre-defined thresholds:
+
+```
+R_ep = −(T·wt + E·wa + V·wv) + B·I(T ≤ T_tol ∧ V ≤ V_tol)
+```
+
+where `wt + wa + wv = 1`, default weights `wt = 0.5`, `wa = 0.3`, `wv = 0.2`, `B = 1.0`.
+
+---
+
+## Repository Layout
+
+```
+vibration_control/
+├── real_time_platform_sim.py        # Physics engine + Gym env + live visualiser
+├── controller_reinforcement_agent.py# PPO agent, training loop, evaluator
+├── generate_csv.py                  # One-shot script to (re)generate training CSV
+├── requirements.txt                 # Python package dependencies
+├── README.md                        # This file
+│
+├── data/
+│   ├── vibration_training_data.csv  # 400 k rows, 40 episodes × 10 s at 1 ms
+│   └── evaluation_results.csv       # Created automatically during evaluation
+│
+├── models/                          # PPO checkpoints saved during training
+├── logs/                            # TensorBoard event files
+└── figures/                         # Training-curve PNG exports
+```
+
+---
+
+## Platform Specification
+
+| Parameter | Value |
+|---|---|
+| Platform geometry | 50 mm × 50 mm rigid square plate |
+| Platform mass | 0.5 kg |
+| Corner spring stiffness K | 500 N/m |
+| Corner damping C | 2 N·s/m |
+| Actuator travel | 0 – 10 mm |
+| Actuator bandwidth | 50 Hz (first-order lag) |
+| IMU noise (1σ) | 0.05° |
+| Current sensor noise (1σ) | 0.02 A |
+| Simulation timestep Δt | 1 ms |
+| Episode length | 10 s |
+
+**Corner numbering (viewed from above):**
+
+```
+  C1 FL (−25,+25) mm    C2 FR (+25,+25) mm
+        ┌─────────────────┐
+        │                 │
+        │    IMU (0,0)    │
+        │                 │
+        └─────────────────┘
+  C4 RL (−25,−25) mm    C3 RR (+25,−25) mm
+```
+
+---
+
+## Quick-Start
+
+### 1  Install dependencies
+
+```bash
+# Create and activate a virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+### 2  Run the live simulation demo
+
+```bash
+# PD-controller demo with real-time 5-panel animation + 3-D platform view
+python real_time_platform_sim.py
+
+# Same demo with random actuator commands (stress test)
+python real_time_platform_sim.py --random
+```
+
+The visualiser shows five live panels:
+
+| Panel | Content |
+|---|---|
+| 1 | Roll θx and pitch θy [°] with ±0.5° tolerance band |
+| 2 | Angular rates ωx, ωy [°/s] |
+| 3 | Motor currents I1–I4 [A] |
+| 4 | Corner shaft displacements x1–x4 [mm] |
+| 5 | 3-D perspective view of the tilting platform |
+
+### 3  Train the PPO agent
+
+```bash
+# Single-process training (500 k timesteps, recommended for first run)
+python controller_reinforcement_agent.py train --timesteps 500000
+
+# Parallel training across 4 environments (faster)
+python controller_reinforcement_agent.py train --timesteps 1000000 --n-envs 4
+
+# Launch TensorBoard to monitor training live
+tensorboard --logdir logs/
+```
+
+Checkpoints are saved every 50 k steps under `models/`.
+The best model (by mean episode reward on the evaluation environment) is saved as
+`models/<run_id>_best/best_model.zip`.
+
+### 4  Evaluate a trained model
+
+```bash
+python controller_reinforcement_agent.py eval \
+    --model models/<run_id>_best/best_model \
+    --episodes 20 \
+    --render
+```
+
+A CSV summary is written to `data/evaluation_results.csv` and a training-curve PNG
+is saved to `figures/`.
+
+### 5  Run demo animation only
+
+```bash
+python controller_reinforcement_agent.py demo \
+    --model models/<run_id>_best/best_model
+```
+
+### 6  Re-generate the training CSV
+
+```bash
+python generate_csv.py
+# Produces data/vibration_training_data.csv  (400 000 rows)
+```
+
+---
+
+## Training Data Format
+
+`data/vibration_training_data.csv` — 400 000 rows × 12 columns:
+
+| Column | Unit | Description |
+|---|---|---|
+| `x_angle` | ° | Roll angle θx (IMU, with noise) |
+| `y_angle` | ° | Pitch angle θy (IMU, with noise) |
+| `xdot` | °/s | Roll rate ωx |
+| `ydot` | °/s | Pitch rate ωy |
+| `I1` | A | Motor current – corner C1 FL |
+| `I2` | A | Motor current – corner C2 FR |
+| `I3` | A | Motor current – corner C3 RR |
+| `I4` | A | Motor current – corner C4 RL |
+| `x1` | mm | Shaft displacement – corner C1 FL |
+| `x2` | mm | Shaft displacement – corner C2 FR |
+| `x3` | mm | Shaft displacement – corner C3 RR |
+| `x4` | mm | Shaft displacement – corner C4 RL |
+
+Generated from 40 simulated episodes (10 s each at Δt = 1 ms) using a mix of
+AR(1) seismic disturbance profiles and multi-frequency harmonic disturbances.
+Episodes alternate between PD-controlled and random-action rollouts to ensure
+coverage of both stable and exploratory state-action regions.
+
+---
+
+## Reward Function Parameters
+
+| Symbol | Value | Description |
+|---|---|---|
+| `wt` | 0.5 | Weight: settling-time penalty |
+| `wa` | 0.3 | Weight: actuation-effort penalty |
+| `wv` | 0.2 | Weight: peak angular-velocity penalty |
+| `B` | 1.0 | Bonus scalar |
+| `θ_tol` | 0.5° | Angular tolerance for settling |
+| `Δt_hold` | 1 s | Required dwell time inside tolerance |
+| `T_ref` | 10 s | Reference (worst-case) settling time |
+| `E_ref` | 80 A·s | Reference cumulative current integral |
+| `V_ref` | 30 °/s | Reference peak angular velocity |
+
+---
+
+## PPO Hyperparameters
+
+| Parameter | Value |
+|---|---|
+| Learning rate | 3 × 10⁻⁴ |
+| n_steps | 2 048 |
+| Batch size | 64 |
+| n_epochs | 10 |
+| γ (discount) | 0.99 |
+| λ (GAE) | 0.95 |
+| Network architecture | π = [256, 256, 128], V = [256, 256, 128], Tanh |
+
+---
+
+## Evaluation Metrics
+
+1. **Settling time T** — mean ± std, median, worst-case across test episodes;
+   percentage reduction vs. PD baseline.
+2. **Actuation energy E** — cumulative |I| integral per episode (A·s);
+   ensemble statistics and percent change vs. baseline.
+3. **Excessive motion V** — peak angular speed √(ωx² + ωy²) per episode (°/s);
+   absolute and percentage reduction, time-above-threshold.
+
+---
+
+## Citation
+
+> K. Le, "AI-Assisted Vibration Control of a Platform," M.S. Project,
+> Dept. of Mechanical Engineering, San José State University, May 2026.
+
+---
+
+## License
+
+For academic use only.  All rights reserved © 2026 Khoi Le.

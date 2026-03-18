@@ -1,3 +1,34 @@
-numpy<2.0.0
-pandas>=1.3.0
-torch>=1.10.0
+# =============================================================================
+# Requirements  –  AI-Assisted Vibration Control of a Platform
+# ME 295A | San José State University | Khoi Le | May 2026
+# =============================================================================
+# Install all dependencies with:
+#   pip install -r requirements.txt
+# For GPU-accelerated training (optional):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# =============================================================================
+
+# Core numerical & scientific
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Plotting & visualisation
+matplotlib>=3.7.0
+
+# Reinforcement-learning environment interface
+gymnasium>=0.29.0
+
+# Stable-Baselines3 (core only — no Atari/ale-py extras needed for this project)
+stable-baselines3>=2.2.0
+
+# Deep-learning backend (CPU build; replace with GPU build if available)
+torch>=2.1.0
+
+# Data handling
+pandas>=2.0.0
+
+# Progress bars (used by SB3 internally)
+tqdm>=4.65.0
+
+# TensorBoard logging
+tensorboard>=2.14.0
