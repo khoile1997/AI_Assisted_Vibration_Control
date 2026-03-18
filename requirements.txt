@@ -1,6 +1,6 @@
 # =============================================================================
 # Requirements  –  AI-Assisted Vibration Control of a Platform
-# ME 295A | San José State University | Khoi Le | May 2026
+# ME 295B | San José State University | Khoi Le | May 2026
 # =============================================================================
 # Install all dependencies with:
 #   pip install -r requirements.txt

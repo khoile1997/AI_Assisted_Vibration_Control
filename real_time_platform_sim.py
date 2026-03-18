@@ -3,7 +3,7 @@
 real_time_platform_sim.py
 ===========================================================================
 Project  : AI-Assisted Vibration Control of a Platform
-Course   : ME 295A – Master's Project, Mechanical Engineering
+Course   : ME 295B – Master's Project, Mechanical Engineering
 Institute: San José State University
 Author   : Khoi Le  |  May 2026
 ---------------------------------------------------------------------------
